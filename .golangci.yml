@@ -30,4 +30,5 @@ formatters:
     - goimports
   settings:
     goimports:
-      local-prefixes: github.com/SabirDzh/VpnCLI
+      local-prefixes:
+        - github.com/SabirDzh/VpnCLI
