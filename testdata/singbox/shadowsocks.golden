@@ -1,0 +1,84 @@
+{
+  "dns": {
+    "final": "remote",
+    "servers": [
+      {
+        "detour": "proxy",
+        "server": "1.1.1.1",
+        "tag": "remote",
+        "type": "https"
+      },
+      {
+        "tag": "local",
+        "type": "local"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "address": [
+        "172.18.0.1/30",
+        "fdfe:dcba:9876::1/126"
+      ],
+      "auto_route": true,
+      "interface_name": "tun0",
+      "mtu": 9000,
+      "stack": "system",
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    },
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 10808,
+      "tag": "mixed-in",
+      "type": "mixed"
+    }
+  ],
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "method": "aes-256-gcm",
+      "password": "pass123",
+      "server": "192.0.2.9",
+      "server_port": 8388,
+      "tag": "proxy",
+      "type": "shadowsocks"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": {
+      "server": "local"
+    },
+    "final": "proxy",
+    "rules": [
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "action": "reject",
+        "ip_cidr": [
+          "224.0.0.0/3",
+          "ff00::/8"
+        ]
+      },
+      {
+        "action": "route",
+        "ip_is_private": true,
+        "outbound": "direct"
+      }
+    ]
+  }
+}
