@@ -1,0 +1,264 @@
+package singbox
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/SabirDzh/VpnCLI/internal/core"
+	"github.com/SabirDzh/VpnCLI/internal/domain"
+)
+
+// Builder translates a neutral Profile into a sing-box 1.14 JSON config.
+// TUN is the primary mode; mixed proxy is an optional second inbound.
+type Builder struct{}
+
+// Build implements core.ConfigBuilder.
+func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
+	if len(p.Raw) > 0 {
+		return p.Raw, nil // imported native config passes through
+	}
+	proxy, err := outbound(p)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg := map[string]any{
+		"log": map[string]any{"level": logLevel(opts.LogLevel)},
+		"dns": map[string]any{
+			"servers": []any{
+				map[string]any{"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": "proxy"},
+				map[string]any{"type": "local", "tag": "local"},
+			},
+			"final": "remote",
+		},
+		"inbounds":  inbounds(opts),
+		"outbounds": []any{proxy, map[string]any{"type": "direct", "tag": "direct"}, map[string]any{"type": "block", "tag": "block"}},
+		"route": map[string]any{
+			"rules": []any{
+				map[string]any{"protocol": "dns", "action": "hijack-dns"},
+				map[string]any{"ip_cidr": []string{"224.0.0.0/3", "ff00::/8"}, "action": "reject"},
+				map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
+			},
+			"auto_detect_interface":   true,
+			"final":                   "proxy",
+			"default_domain_resolver": map[string]any{"server": "local"},
+		},
+	}
+
+	out, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func logLevel(l string) string {
+	switch l {
+	case "debug", "info", "warn", "error":
+		return l
+	default:
+		return "info"
+	}
+}
+
+func inbounds(opts core.Options) []any {
+	var in []any
+	if opts.TUNEnabled {
+		mtu := opts.MTU
+		if mtu == 0 {
+			mtu = 9000
+		}
+		tun := map[string]any{
+			"type":         "tun",
+			"tag":          "tun-in",
+			"address":      []string{"172.18.0.1/30", "fdfe:dcba:9876::1/126"},
+			"mtu":          mtu,
+			"stack":        "system",
+			"auto_route":   opts.AutoRoute,
+			"strict_route": opts.StrictRoute,
+		}
+		if opts.TUNName != "" {
+			// Explicit name (e.g. tun0 on Linux). Empty = auto:
+			// sing-box picks tun0 on Linux, utunX on macOS.
+			tun["interface_name"] = opts.TUNName
+		}
+		in = append(in, tun)
+	}
+	if opts.MixedEnabled {
+		port := opts.MixedPort
+		if port == 0 {
+			port = 10808
+		}
+		in = append(in, map[string]any{
+			"type":        "mixed",
+			"tag":         "mixed-in",
+			"listen":      "127.0.0.1",
+			"listen_port": port,
+		})
+	}
+	return in
+}
+
+func outbound(p domain.Profile) (map[string]any, error) {
+	base := map[string]any{
+		"tag":         "proxy",
+		"server":      p.Endpoint.Host,
+		"server_port": p.Endpoint.Port,
+	}
+	s := p.Settings
+	switch p.Protocol {
+	case domain.ProtocolVLESS:
+		if s.UUID == "" {
+			return nil, fmt.Errorf("vless: missing uuid")
+		}
+		base["type"] = "vless"
+		base["uuid"] = s.UUID
+		if s.Flow != "" {
+			base["flow"] = s.Flow
+		}
+		if tlsCfg := tlsFor(s); tlsCfg != nil {
+			base["tls"] = tlsCfg
+		}
+		if tr := transportFor(s); tr != nil {
+			base["transport"] = tr
+		}
+	case domain.ProtocolVMess:
+		if s.UUID == "" {
+			return nil, fmt.Errorf("vmess: missing uuid")
+		}
+		base["type"] = "vmess"
+		base["uuid"] = s.UUID
+		if s.AlterID > 0 {
+			base["alter_id"] = s.AlterID
+		}
+		if s.Cipher != "" {
+			base["security"] = s.Cipher
+		}
+		if tlsCfg := tlsFor(s); tlsCfg != nil {
+			base["tls"] = tlsCfg
+		}
+		if tr := transportFor(s); tr != nil {
+			base["transport"] = tr
+		}
+	case domain.ProtocolTrojan:
+		if s.Password == "" {
+			return nil, fmt.Errorf("trojan: missing password")
+		}
+		base["type"] = "trojan"
+		base["password"] = s.Password
+		base["tls"] = tlsForcing(s)
+		if tr := transportFor(s); tr != nil {
+			base["transport"] = tr
+		}
+	case domain.ProtocolShadowsocks:
+		if s.Password == "" || s.Method == "" {
+			return nil, fmt.Errorf("shadowsocks: missing method/password")
+		}
+		base["type"] = "shadowsocks"
+		base["method"] = s.Method
+		base["password"] = s.Password
+	case domain.ProtocolHysteria2:
+		if s.Password == "" {
+			return nil, fmt.Errorf("hysteria2: missing password")
+		}
+		base["type"] = "hysteria2"
+		base["password"] = s.Password
+		base["tls"] = hy2TLS(p)
+		if s.ObfsType != "" {
+			obfs := map[string]any{"type": s.ObfsType}
+			if s.ObfsPassword != "" {
+				obfs["password"] = s.ObfsPassword
+			}
+			base["obfs"] = obfs
+		}
+		if s.UpMbps > 0 {
+			base["up_mbps"] = s.UpMbps
+		}
+		if s.DownMbps > 0 {
+			base["down_mbps"] = s.DownMbps
+		}
+	default:
+		return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedProtocol, p.Protocol)
+	}
+	return base, nil
+}
+
+// tlsFor returns nil when security is none/empty (plain connection).
+func tlsFor(s domain.ProtocolSettings) map[string]any {
+	switch s.Security {
+	case "tls", "reality":
+	default:
+		return nil
+	}
+	return tlsForcing(s)
+}
+
+func tlsForcing(s domain.ProtocolSettings) map[string]any {
+	t := map[string]any{"enabled": true}
+	if s.SNI != "" {
+		t["server_name"] = s.SNI
+	}
+	if s.Security == "reality" {
+		r := map[string]any{"enabled": true}
+		if s.RealityPublicKey != "" {
+			r["public_key"] = s.RealityPublicKey
+		}
+		if s.RealityShortID != "" {
+			r["short_id"] = s.RealityShortID
+		}
+		t["reality"] = r
+	}
+	if s.FP != "" {
+		t["utls"] = map[string]any{"enabled": true, "fingerprint": s.FP}
+	}
+	if s.ALPN != "" {
+		t["alpn"] = []string{s.ALPN}
+	}
+	if s.Insecure {
+		t["insecure"] = true
+	}
+	return t
+}
+
+// hy2TLS builds mandatory TLS for Hysteria2: server_name falls back to the
+// endpoint host, ALPN defaults to h3.
+func hy2TLS(p domain.Profile) map[string]any {
+	s := p.Settings
+	t := map[string]any{"enabled": true}
+	name := s.SNI
+	if name == "" {
+		name = p.Endpoint.Host
+	}
+	t["server_name"] = name
+	alpn := s.ALPN
+	if alpn == "" {
+		alpn = "h3"
+	}
+	t["alpn"] = []string{alpn}
+	if s.Insecure {
+		t["insecure"] = true
+	}
+	return t
+}
+
+func transportFor(s domain.ProtocolSettings) map[string]any {
+	switch s.Transport {
+	case "ws":
+		t := map[string]any{"type": "ws"}
+		if s.Path != "" {
+			t["path"] = s.Path
+		}
+		if s.Host != "" {
+			t["headers"] = map[string]any{"Host": s.Host}
+		}
+		return t
+	case "grpc":
+		t := map[string]any{"type": "grpc"}
+		if s.Path != "" {
+			t["service_name"] = s.Path
+		}
+		return t
+	default:
+		return nil
+	}
+}

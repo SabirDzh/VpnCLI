@@ -1,0 +1,141 @@
+package app
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/SabirDzh/VpnCLI/internal/config"
+	"github.com/SabirDzh/VpnCLI/internal/core"
+	"github.com/SabirDzh/VpnCLI/internal/domain"
+	"github.com/SabirDzh/VpnCLI/internal/platform"
+	"github.com/SabirDzh/VpnCLI/internal/storage"
+)
+
+// ConnectionService owns engine lifecycle: up/down/status.
+type ConnectionService struct {
+	store    *storage.Store
+	registry *core.Registry
+	cfg      config.Config
+	paths    platform.Paths
+}
+
+// NewConnectionService creates the service.
+func NewConnectionService(store *storage.Store, reg *core.Registry, cfg config.Config, paths platform.Paths) *ConnectionService {
+	return &ConnectionService{store: store, registry: reg, cfg: cfg, paths: paths}
+}
+
+func (s *ConnectionService) options() core.Options {
+	return core.Options{
+		TUNEnabled:   s.cfg.TUN.Enabled,
+		MTU:          s.cfg.TUN.MTU,
+		Stack:        s.cfg.TUN.Stack,
+		AutoRoute:    s.cfg.TUN.AutoRoute,
+		StrictRoute:  s.cfg.TUN.StrictRoute,
+		MixedEnabled: true,
+		MixedPort:    s.cfg.MixedPort,
+		LogLevel:     s.cfg.Log.Level,
+	}
+}
+
+// Up starts the VPN for the given profile (or the active one).
+func (s *ConnectionService) Up(ctx context.Context, profileRef string) (core.RunInfo, error) {
+	if !platform.IsPrivileged() {
+		return core.RunInfo{}, domain.ErrNotPrivileged
+	}
+	if st, _ := s.store.LoadState(); st != nil && platform.Alive(st.PID) {
+		return core.RunInfo{}, fmt.Errorf("%w (pid %d)", domain.ErrAlreadyRunning, st.PID)
+	}
+	var (
+		p   domain.Profile
+		err error
+	)
+	if profileRef != "" {
+		p, err = s.store.GetProfile(profileRef)
+	} else {
+		p, err = s.store.ActiveProfile()
+	}
+	if err != nil {
+		return core.RunInfo{}, err
+	}
+
+	engine, err := s.registry.Select(p, s.cfg.Core.Default)
+	if err != nil {
+		return core.RunInfo{}, err
+	}
+	info, err := engine.Start(ctx, core.StartRequest{
+		Profile:    p,
+		Options:    s.options(),
+		RuntimeDir: s.paths.RuntimeDir,
+		LogFile:    s.paths.LogFile,
+	})
+	if err != nil {
+		return core.RunInfo{}, err
+	}
+	_ = s.store.SaveState(storage.State{
+		Core:       engine.Name(),
+		ProfileID:  p.ID,
+		PID:        info.PID,
+		StartedAt:  time.Now(),
+		ConfigPath: info.ConfigPath,
+	})
+	// Remember selection so `status` and subsequent `up` resolve it.
+	_, _ = s.store.SetActiveProfile(p.ID)
+	return info, nil
+}
+
+// Down stops the running VPN and clears state.
+func (s *ConnectionService) Down(ctx context.Context) error {
+	st, err := s.store.LoadState()
+	if err != nil {
+		return err
+	}
+	if st == nil || !platform.Alive(st.PID) {
+		_ = s.store.ClearState()
+		return domain.ErrNotRunning
+	}
+	engine, err := s.registry.Get(st.Core)
+	if err != nil {
+		// Unknown core: still clear stale state.
+		_ = s.store.ClearState()
+		return err
+	}
+	if err := engine.Stop(ctx, core.RunInfo{PID: st.PID, ConfigPath: st.ConfigPath, Core: st.Core}); err != nil {
+		return err
+	}
+	return s.store.ClearState()
+}
+
+// Status describes the current connection.
+func (s *ConnectionService) Status(ctx context.Context) (StatusView, error) {
+	st, err := s.store.LoadState()
+	if err != nil {
+		return StatusView{}, err
+	}
+	if st == nil {
+		return StatusView{Running: false}, nil
+	}
+	if !platform.Alive(st.PID) {
+		// Stale pid file (e.g. reboot or kill): clean up and report stopped.
+		_ = s.store.ClearState()
+		return StatusView{Running: false, StalePID: st.PID}, nil
+	}
+	view := StatusView{Running: true, Core: st.Core, PID: st.PID, Since: st.StartedAt, ProfileID: st.ProfileID}
+	if p, err := s.store.GetProfile(st.ProfileID); err == nil {
+		view.ProfileName = p.Name
+		view.Endpoint = fmt.Sprintf("%s:%d", p.Endpoint.Host, p.Endpoint.Port)
+	}
+	return view, nil
+}
+
+// StatusView is a CLI-friendly status snapshot.
+type StatusView struct {
+	Running     bool
+	Core        string
+	ProfileID   string
+	ProfileName string
+	Endpoint    string
+	PID         int
+	Since       time.Time
+	StalePID    int
+}
