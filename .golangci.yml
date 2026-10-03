@@ -1,0 +1,31 @@
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - revive
+    - gosec
+    - errorlint
+    - gocritic
+    - contextcheck
+  settings:
+    revive:
+      rules:
+        - name: package-comments
+        - name: exported
+    gocritic:
+      enabled-checks:
+        - appendAssign
+        - argOrder
+        - singleCaseSwitch
+  exclusions:
+    presets:
+      - std-error-handling
+formatters:
+  enable:
+    - gofumpt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes: github.com/SabirDzh/VpnCLI
