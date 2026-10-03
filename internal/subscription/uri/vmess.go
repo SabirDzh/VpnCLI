@@ -4,10 +4,11 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/SabirDzh/VpnCLI/internal/domain"
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/SabirDzh/VpnCLI/internal/domain"
 )
 
 type vmessJSON struct {
@@ -32,12 +33,12 @@ func ParseVMess(raw string) (domain.Profile, error) {
 	body = strings.TrimSpace(body)
 	data, err := decodeB64(body)
 	if err != nil {
-		return domain.Profile{}, fmt.Errorf("%w: vmess base64: %v", domain.ErrParse, err)
+		return domain.Profile{}, fmt.Errorf("%w: vmess base64: %w", domain.ErrParse, err)
 	}
 	var v vmessJSON
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	if err := dec.Decode(&v); err != nil {
-		return domain.Profile{}, fmt.Errorf("%w: vmess json: %v", domain.ErrParse, err)
+		return domain.Profile{}, fmt.Errorf("%w: vmess json: %w", domain.ErrParse, err)
 	}
 	if v.Add == "" || v.ID == "" {
 		return domain.Profile{}, fmt.Errorf("%w: vmess: missing add/id", domain.ErrParse)

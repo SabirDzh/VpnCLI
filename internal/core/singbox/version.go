@@ -8,7 +8,8 @@ import (
 	"strings"
 )
 
-// Minimum supported sing-box version (TUN/DNS format fixed for 1.14.x).
+// MinVersion is the minimum supported sing-box version
+// (TUN/DNS format fixed for 1.14.x).
 const MinVersion = "1.14.0"
 
 var versionRe = regexp.MustCompile(`(?im)^sing-box version (\S+)`)
@@ -59,7 +60,7 @@ func looksLikeVersion(s string) bool {
 		return false
 	}
 	for _, p := range parts {
-		if _, err := strconv.Atoi(strings.TrimRight(p, "-alpha-beta")); err != nil {
+		if _, err := strconv.Atoi(strings.TrimRight(p, "-alphebt")); err != nil {
 			return false
 		}
 	}

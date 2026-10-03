@@ -12,7 +12,7 @@ func TestFetchPlainList(t *testing.T) {
 		if r.Header.Get("User-Agent") == "" {
 			t.Error("missing User-Agent")
 		}
-		w.Write([]byte("trojan://pw@h.example:443#one\n\n# comment\nvless://11111111-2222-4333-8444-555555555555@h2.example:443#two\n"))
+		_, _ = w.Write([]byte("trojan://pw@h.example:443#one\n\n# comment\nvless://11111111-2222-4333-8444-555555555555@h2.example:443#two\n"))
 	}))
 	defer srv.Close()
 	got, err := Fetch(srv.URL)
@@ -28,7 +28,7 @@ func TestFetchBase64List(t *testing.T) {
 	body := "ss://YWVzLTI1Ni1nY206cHcx@10.0.0.1:8388#s1\ntrojan://pw@h.example:443#t1\n"
 	enc := base64.StdEncoding.EncodeToString([]byte(body))
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(enc))
+		_, _ = w.Write([]byte(enc))
 	}))
 	defer srv.Close()
 	got, err := Fetch(srv.URL)

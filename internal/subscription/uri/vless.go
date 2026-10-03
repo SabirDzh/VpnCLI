@@ -14,7 +14,7 @@ import (
 func ParseVLESS(raw string) (domain.Profile, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return domain.Profile{}, fmt.Errorf("%w: vless: %v", domain.ErrParse, err)
+		return domain.Profile{}, fmt.Errorf("%w: vless: %w", domain.ErrParse, err)
 	}
 	if u.User == nil {
 		return domain.Profile{}, fmt.Errorf("%w: vless: missing uuid", domain.ErrParse)

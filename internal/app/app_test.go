@@ -32,10 +32,14 @@ func TestSubscriptionSync(t *testing.T) {
 	}
 	// fake remote: two profiles
 	svc.fetch = func(url string) ([]domain.Profile, error) {
-		a := domain.Profile{ID: "id-a", Name: "a", Protocol: domain.ProtocolTrojan,
-			Endpoint: domain.Endpoint{Host: "h1", Port: 443}}
-		b := domain.Profile{ID: "id-b", Name: "b", Protocol: domain.ProtocolVLESS,
-			Endpoint: domain.Endpoint{Host: "h2", Port: 443}}
+		a := domain.Profile{
+			ID: "id-a", Name: "a", Protocol: domain.ProtocolTrojan,
+			Endpoint: domain.Endpoint{Host: "h1", Port: 443},
+		}
+		b := domain.Profile{
+			ID: "id-b", Name: "b", Protocol: domain.ProtocolVLESS,
+			Endpoint: domain.Endpoint{Host: "h2", Port: 443},
+		}
 		return []domain.Profile{a, b}, nil
 	}
 	if n, err := svc.Update(sub.ID); err != nil || n != 2 {
@@ -47,8 +51,10 @@ func TestSubscriptionSync(t *testing.T) {
 	}
 	// second sync drops id-b
 	svc.fetch = func(url string) ([]domain.Profile, error) {
-		return []domain.Profile{{ID: "id-a", Name: "a", Protocol: domain.ProtocolTrojan,
-			Endpoint: domain.Endpoint{Host: "h1", Port: 443}}}, nil
+		return []domain.Profile{{
+			ID: "id-a", Name: "a", Protocol: domain.ProtocolTrojan,
+			Endpoint: domain.Endpoint{Host: "h1", Port: 443},
+		}}, nil
 	}
 	if n, err := svc.Update(sub.ID); err != nil || n != 1 {
 		t.Fatalf("update2: %d %v", n, err)

@@ -13,6 +13,7 @@ func (f *fakeCore) Name() string { return f.name }
 func (f *fakeCore) Supports(p domain.Profile) bool {
 	return p.Protocol == domain.ProtocolTrojan
 }
+
 func (f *fakeCore) Start(_ context.Context, _ StartRequest) (RunInfo, error) {
 	return RunInfo{PID: 42, Core: f.name}, nil
 }

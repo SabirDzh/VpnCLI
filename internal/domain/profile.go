@@ -10,12 +10,18 @@ import (
 // Protocol — нейтральный идентификатор протокола, независимый от ядра.
 type Protocol string
 
+// Protocol constants for all supported proxy protocols.
 const (
-	ProtocolVLESS       Protocol = "vless"
-	ProtocolVMess       Protocol = "vmess"
-	ProtocolTrojan      Protocol = "trojan"
+	// ProtocolVLESS is VLESS (optionally with REALITY/vision flow).
+	ProtocolVLESS Protocol = "vless"
+	// ProtocolVMess is classic VMess.
+	ProtocolVMess Protocol = "vmess"
+	// ProtocolTrojan is Trojan over TLS.
+	ProtocolTrojan Protocol = "trojan"
+	// ProtocolShadowsocks is Shadowsocks.
 	ProtocolShadowsocks Protocol = "shadowsocks"
-	ProtocolHysteria2   Protocol = "hysteria2"
+	// ProtocolHysteria2 is Hysteria2 over QUIC.
+	ProtocolHysteria2 Protocol = "hysteria2"
 )
 
 // Valid reports whether p is a protocol supported by the MVP scope.

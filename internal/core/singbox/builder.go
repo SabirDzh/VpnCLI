@@ -1,3 +1,6 @@
+// Package singbox adapts the sing-box core to the core.Core interface:
+// neutral profiles are translated to native JSON and run as an
+// external process via process.Supervisor.
 package singbox
 
 import (

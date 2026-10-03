@@ -16,7 +16,7 @@ import (
 func ParseShadowsocks(raw string) (domain.Profile, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return domain.Profile{}, fmt.Errorf("%w: ss: %v", domain.ErrParse, err)
+		return domain.Profile{}, fmt.Errorf("%w: ss: %w", domain.ErrParse, err)
 	}
 	name := nameOf(u, "")
 	var method, password, host string
@@ -48,7 +48,7 @@ func ParseShadowsocks(raw string) (domain.Profile, error) {
 		}
 		decoded, err := decodeB64(strings.TrimSpace(body))
 		if err != nil {
-			return domain.Profile{}, fmt.Errorf("%w: ss legacy base64: %v", domain.ErrParse, err)
+			return domain.Profile{}, fmt.Errorf("%w: ss legacy base64: %w", domain.ErrParse, err)
 		}
 		s := string(decoded)
 		at := strings.LastIndex(s, "@")

@@ -14,14 +14,16 @@ linters:
       rules:
         - name: package-comments
         - name: exported
-    gocritic:
-      enabled-checks:
-        - appendAssign
-        - argOrder
-        - singleCaseSwitch
   exclusions:
     presets:
       - std-error-handling
+    rules:
+      # Golden files are committed fixtures; 0644 is intentional.
+      - linters: [gosec]
+        path: _test\.go
+      # Core binaries, configs and logs come from user config/flags by design.
+      - linters: [gosec]
+        path: internal/(core/singbox/core|core/singbox/version|process/supervisor|storage/storage)\.go
 formatters:
   enable:
     - gofumpt
