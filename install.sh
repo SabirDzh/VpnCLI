@@ -9,8 +9,8 @@ BIN="vpn"
 os="$(uname -s)"
 arch="$(uname -m)"
 case "$os" in
-  Linux)  OS="Linux" ;;
-  Darwin) OS="Darwin" ;;
+  Linux)  OS="linux" ;;
+  Darwin) OS="darwin" ;;
   *) echo "unsupported OS: $os" >&2; exit 1 ;;
 esac
 case "$arch" in
@@ -38,15 +38,18 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
+VER="${TAG#v}" # release assets use the version without leading v
 echo "installing $BIN $TAG ($OS/$ARCH)..."
-fetch "https://github.com/$REPO/releases/download/$TAG/${BIN}_${TAG}_${OS}_${ARCH}.tar.gz" "$tmp/vpn.tar.gz"
+fetch "https://github.com/$REPO/releases/download/$TAG/${BIN}_${VER}_${OS}_${ARCH}.tar.gz" "$tmp/vpn.tar.gz"
 tar -xzf "$tmp/vpn.tar.gz" -C "$tmp"
 
 DEST="${PREFIX:-/usr/local}/bin/$BIN"
-if [ -w "$(dirname "$DEST")" ]; then
+DESTDIR="$(dirname "$DEST")"
+[ -d "$DESTDIR" ] || mkdir -p "$DESTDIR" 2>/dev/null || sudo mkdir -p "$DESTDIR"
+if [ -w "$DESTDIR" ]; then
   install -m 0755 "$tmp/$BIN" "$DEST"
 else
-  echo "need sudo for $(dirname "$DEST"), retrying with sudo..."
+  echo "need sudo for $DESTDIR, retrying with sudo..."
   sudo install -m 0755 "$tmp/$BIN" "$DEST"
 fi
 echo "installed to $DEST"

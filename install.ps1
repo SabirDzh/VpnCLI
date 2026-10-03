@@ -18,8 +18,9 @@ $tmp = Join-Path $env:TEMP "vpn-install"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 try {
   Write-Host "installing $Bin $Tag (Windows/$Arch)..."
+  $Ver = $Tag.TrimStart("v") # release assets use the version without leading v
   $zip = Join-Path $tmp "vpn.zip"
-  Invoke-WebRequest "https://github.com/$Repo/releases/download/$Tag/${Bin}_${Tag}_Windows_${Arch}.zip" -OutFile $zip
+  Invoke-WebRequest "https://github.com/$Repo/releases/download/$Tag/${Bin}_${Ver}_windows_${Arch}.zip" -OutFile $zip
   Expand-Archive -Path $zip -DestinationPath $tmp -Force
   $dest = Join-Path ($env:ProgramFiles) "vpn"
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
