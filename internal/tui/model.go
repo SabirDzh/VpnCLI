@@ -217,10 +217,10 @@ func (m *Model) menu() string {
 		head := fmt.Sprintf("%d. %s", i+1, r.title)
 		head += strings.Repeat(" ", max(0, 18-len([]rune(head))))
 		summary := shared.Truncate(r.summary, w-5-18-2)
-		plain := "     " + head + "  " + summary
+		plain := "  " + head + "  " + summary
 		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
-			plain = m.styles.ActiveMark.Render(">") + "    " + plain[5:]
+			plain = m.styles.ActiveMark.Render("> ") + plain[2:]
 			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
 		} else {
 			b.WriteString(m.styles.Dim.Render(plain) + "\n")
