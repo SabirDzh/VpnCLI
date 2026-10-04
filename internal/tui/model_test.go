@@ -57,15 +57,15 @@ func TestMenuNavigation(t *testing.T) {
 	if m.cursor != 0 {
 		t.Fatal("k must move up")
 	}
-	// old tab keys do nothing now
+	// number keys open pages directly
 	nm, _ = m.Update(keyPress("2"))
 	m = nm.(*Model)
-	if m.page != nil {
-		t.Fatal("tabs are gone")
+	if m.page == nil || m.page.Title() != "Profiles" {
+		t.Fatal("2 must open Profiles")
 	}
-	// enter opens the page, esc returns
-	nm, _ = m.Update(keyPress("down"))
+	nm, _ = m.Update(shared.BackMsg{})
 	m = nm.(*Model)
+	// enter opens the page, esc returns (cursor still on Profiles)
 	nm, cmd := m.Update(keyPress("enter"))
 	m = nm.(*Model)
 	if m.page == nil {
@@ -256,9 +256,14 @@ func TestHelpOverlay(t *testing.T) {
 	if strings.Contains(strip(m.render()), "Клавиши") {
 		t.Fatal("must hide full help")
 	}
-	// same-tab switch is a no-op command
-	if _, cmd := m.Update(keyPress("1")); cmd != nil {
-		t.Fatal("same-tab switch must be silent")
+	// number key opens the page with a fetch command
+	nm, cmd := m.Update(keyPress("1"))
+	m = nm.(*Model)
+	if m.page == nil || m.page.Title() != "Status" {
+		t.Fatal("1 must open Status")
+	}
+	if cmd == nil {
+		t.Fatal("opening must fetch")
 	}
 }
 
