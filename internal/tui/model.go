@@ -304,7 +304,7 @@ func (m *Model) footer() string {
 		m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit"),
 		m.styles.Key.Render("?")+" "+m.styles.Help.Render("help"),
 	)
-	foot := "  " + strings.Join(parts, " | ")
+	foot := strings.Join(parts, " | ")
 	return foot
 }
 
