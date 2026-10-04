@@ -197,3 +197,16 @@ func TestBadgesRendered(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderActiveAndEmpty(t *testing.T) {
+	m, _, _ := testModel()
+	out := m.View(80, 20)
+	if !strings.Contains(out, "● home") {
+		t.Fatalf("must show active name:\n%s", out)
+	}
+	empty := New(context.Background(), &testutil.FakeConn{}, &testutil.FakeProfiles{}, theme.Default(), false)
+	ns, _ := empty.Update(shared.ProfilesMsg{})
+	if out := ns.(*Model).View(80, 20); !strings.Contains(out, "vpn profile add") {
+		t.Fatalf("must hint add:\n%s", out)
+	}
+}

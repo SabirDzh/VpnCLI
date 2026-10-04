@@ -25,6 +25,7 @@ type Model struct {
 
 	list    []domain.Subscription
 	counts  map[string]int
+	errs    map[string]string // last update error per subscription id
 	cursor  int
 	loaded  bool
 	errText string
@@ -41,6 +42,7 @@ func New(deps shared.Deps, st theme.Styles) *Model {
 		profiles: deps.Profiles,
 		subs:     deps.Subs,
 		styles:   st,
+		errs:     map[string]string{},
 		spin:     spinner.New(spinner.WithSpinner(spinner.Dot)),
 		toast:    component.NewToast(st),
 	}
@@ -86,8 +88,17 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 			if label == "" {
 				label = "обновление"
 			}
+			if msg.Label != "" {
+				m.errs[msg.Label] = shared.DescribeError(msg.Err)
+			}
 			cmds = append(cmds, m.showToast(label+": "+shared.DescribeError(msg.Err), false))
 			return m, tea.Batch(cmds...)
+		}
+		if msg.Op == "update" && msg.Label != "" {
+			delete(m.errs, msg.Label)
+		}
+		if msg.Op == "update-all" {
+			m.errs = map[string]string{}
 		}
 		cmds = append(cmds, m.showToast(fmt.Sprintf("Обновлено профилей: %d", msg.N), true))
 		return m, tea.Batch(cmds...)
@@ -185,6 +196,9 @@ func (m *Model) View(_, _ int) string {
 			row = m.styles.SelectedRow.Render(row)
 		}
 		b.WriteString(row + "\n")
+		if emsg, ok := m.errs[s.ID]; ok {
+			b.WriteString("  " + m.styles.Err.Render("! "+emsg) + "\n")
+		}
 	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render(m.errText) + "\n")

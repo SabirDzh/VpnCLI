@@ -27,11 +27,12 @@ type Model struct {
 	readOnly bool
 	ctx      context.Context
 
-	list     list.Model
-	activeID string
-	loaded   bool
-	errText  string
-	busy     bool
+	list       list.Model
+	activeID   string
+	activeName string
+	loaded     bool
+	errText    string
+	busy       bool
 	// connectAfterUse chains a connect behind the pending activation.
 	connectAfterUse bool
 	confirm         component.Confirm
@@ -133,8 +134,12 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		}
 		m.errText = ""
 		m.activeID = msg.ActiveID
+		m.activeName = ""
 		items := make([]list.Item, 0, len(msg.List))
 		for _, p := range msg.List {
+			if p.ID == msg.ActiveID {
+				m.activeName = p.Name
+			}
 			items = append(items, profileItem{
 				id: p.ID, name: p.Name, protocol: string(p.Protocol),
 				source: p.Source, active: p.ID == msg.ActiveID,
@@ -267,10 +272,16 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 // View implements shared.Screen.
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
-	b.WriteString(m.styles.Title.Render(fmt.Sprintf("Profiles (%d)", len(m.list.Items()))) + "\n")
+	b.WriteString(m.styles.Title.Render("Profiles") + m.styles.Dim.Render(fmt.Sprintf(" (%d)", len(m.list.Items()))))
+	if m.activeName != "" {
+		b.WriteString("  " + m.styles.ActiveMark.Render("● "+m.activeName))
+	}
+	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("enter — выбрать · c — выбрать и подключить · / — фильтр") + "\n\n")
 	if !m.loaded {
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
+	} else if len(m.list.Items()) == 0 {
+		b.WriteString(m.styles.Dim.Render("Нет профилей. Добавь через: vpn profile add <uri>") + "\n")
 	} else {
 		b.WriteString(shared.IndentLines(m.list.View(), " ") + "\n")
 	}

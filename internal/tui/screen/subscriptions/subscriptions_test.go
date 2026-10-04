@@ -171,3 +171,17 @@ func TestEmptyListKeysIgnored(t *testing.T) {
 		}
 	}
 }
+
+func TestRowErrorShown(t *testing.T) {
+	m, _ := testModel()
+	ns, _ := m.Update(shared.OpDoneMsg{Op: "update", Label: "s1", Err: errBoom{}})
+	out := ns.(*Model).View(80, 20)
+	if !strings.Contains(out, "boom") {
+		t.Fatalf("must show row error:\n%s", out)
+	}
+	// success clears it
+	ns, _ = ns.Update(shared.OpDoneMsg{Op: "update", Label: "s1", N: 2})
+	if out := ns.(*Model).View(80, 20); strings.Contains(out, "! boom") {
+		t.Fatalf("must clear row error:\n%s", out)
+	}
+}
