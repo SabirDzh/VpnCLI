@@ -100,7 +100,17 @@ tun:
   auto_route: true
   strict_route: true
 mixed_port: 10808
+features:
+  adblock: false        # блокировка рекламы (DNS-уровень, geosite-ads)
+  trackerblock: false   # блокировка трекеров (geosite-public-tracker)
+  split_exclude: []     # домены/CIDR напрямую мимо VPN: [bank.example, 192.168.0.0/16]
+  split_include: []     # только это через VPN, остальное напрямую (непустой меняет final на direct)
+update:
+  auto: false           # автообновление CLI при запуске (cli и tui)
 ```
+
+`features` и `update.auto` можно менять прямо в TUI (Settings и Other):
+изменения сохраняются в конфиг и применяются при следующем подключении.
 
 ## TUI
 
@@ -123,7 +133,13 @@ sudo vpn tui
 | `c` (Profiles) | активировать и подключить |
 | `u` / `U` | обновить подписку / все подписки |
 | `a` | добавить профиль / подписку |
+| `e` | редактировать профиль / подписку |
 | `x` | удалить выбранное (с подтверждением) |
+| `enter/space` (Settings) | переключить блокировку, править split-списки |
+| `c` (Other) | проверить обновления |
+| `U` (Other) | установить обновление |
+| `a` (Other) | автообновление вкл/выкл |
+| `o` (Other) | открыть репозиторий |
 | `/` | фильтр (Profiles) |
 | `r` | обновить данные |
 | `?` | полная справка |
