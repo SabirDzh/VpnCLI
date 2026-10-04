@@ -21,8 +21,10 @@ type UpdateService struct {
 
 // NewUpdateService wires the service.
 func NewUpdateService(repo, current string) *UpdateService {
-	return &UpdateService{Repo: repo, Current: current,
-		Client: &http.Client{Timeout: 60 * time.Second}}
+	return &UpdateService{
+		Repo: repo, Current: current,
+		Client: &http.Client{Timeout: 60 * time.Second},
+	}
 }
 
 // CheckResult describes the update state.
@@ -73,12 +75,14 @@ func replaceExecutable(src string) error {
 	if err != nil {
 		return err
 	}
-	in, err := os.Open(src)
+	// src is our own MkdirTemp download (gosec exclusion, see line below).
+	in, err := os.Open(src) //nolint:gosec
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(exe, os.O_WRONLY|os.O_TRUNC, 0o755)
+	// exe is our own binary path (gosec exclusion, see line below).
+	out, err := os.OpenFile(exe, os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("replace %s (re-run with rights to write it): %w", exe, err)
 	}

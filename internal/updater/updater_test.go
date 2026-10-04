@@ -35,7 +35,7 @@ func TestAssetName(t *testing.T) {
 
 func TestLatestTag(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"tag_name":"v0.2.0"}`))
+		_, _ = w.Write([]byte(`{"tag_name":"v0.2.0"}`))
 	}))
 	defer srv.Close()
 	old := apiBase

@@ -5,6 +5,7 @@ import (
 	"archive/zip"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,10 +41,12 @@ func DownloadAndExtract(ctx context.Context, client *http.Client, url, goos stri
 	if goos == "windows" {
 		name += ".exe"
 	}
+	// Cap decompression output: release assets are ~10MB.
+	body := io.LimitReader(resp.Body, 128<<20)
 	if strings.HasSuffix(url, ".zip") {
-		return unzipTo(resp.Body, dir, name)
+		return unzipTo(body, dir, name)
 	}
-	return untarTo(resp.Body, dir, name)
+	return untarTo(body, dir, name)
 }
 
 func untarTo(r io.Reader, dir, want string) (string, error) {
@@ -55,7 +58,7 @@ func untarTo(r io.Reader, dir, want string) (string, error) {
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
@@ -64,12 +67,15 @@ func untarTo(r io.Reader, dir, want string) (string, error) {
 		if filepath.Base(hdr.Name) != want || !hdr.FileInfo().Mode().IsRegular() {
 			continue
 		}
-		out := filepath.Join(dir, want)
-		f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		// basename is pinned to want above; 0755 keeps the binary executable.
+		// path built from MkdirTemp dir + fixed binary name (gosec exclusion, see line below).
+		out := filepath.Join(dir, want) //nolint:gosec
+		// release binary must stay executable (gosec exclusion, see line below).
+		f, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
 		if err != nil {
 			return "", err
 		}
-		_, err = io.Copy(f, tr)
+		_, err = io.Copy(f, tr) //nolint:gosec // stream capped by 128MB LimitReader above
 		_ = f.Close()
 		if err != nil {
 			return "", err
@@ -104,13 +110,15 @@ func unzipTo(r io.Reader, dir, want string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		out := filepath.Join(dir, want)
-		dst, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+		// path built from MkdirTemp dir + fixed binary name (gosec exclusion, see line below).
+		out := filepath.Join(dir, want) //nolint:gosec
+		// release binary must stay executable (gosec exclusion, see line below).
+		dst, err := os.OpenFile(out, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec
 		if err != nil {
 			_ = rc.Close()
 			return "", err
 		}
-		_, err = io.Copy(dst, rc)
+		_, err = io.Copy(dst, rc) //nolint:gosec // stream capped by 128MB LimitReader above
 		_ = dst.Close()
 		_ = rc.Close()
 		if err != nil {
