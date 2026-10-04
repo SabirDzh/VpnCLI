@@ -143,4 +143,3 @@ func vmessURI(p domain.Profile) (string, error) {
 	}
 	return "vmess://" + base64.RawURLEncoding.EncodeToString(data), nil
 }
-

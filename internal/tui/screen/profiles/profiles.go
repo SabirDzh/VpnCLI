@@ -43,8 +43,8 @@ type Model struct {
 	input           component.Input
 	pending         domain.Profile // target awaiting confirm verdict or being edited
 	// editStep drives the two-step edit form: 0 idle, 1 name, 2 uri.
-	editStep  int
-	editName  string
+	editStep int
+	editName string
 	// fileImport marks the input as a config-file path (i key).
 	fileImport bool
 	// injectables for tests.

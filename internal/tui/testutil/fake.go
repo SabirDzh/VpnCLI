@@ -87,9 +87,9 @@ func (f *FakeProfiles) Add(uri string) (domain.Profile, error) {
 
 // RawAdded records AddRaw calls.
 type RawAdd struct {
-	Name string
+	Name  string
 	Proto domain.Protocol
-	Data []byte
+	Data  []byte
 }
 
 // AddRaw implements shared.ProfileAPI.

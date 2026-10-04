@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/SabirDzh/VpnCLI/internal/config"
@@ -22,6 +23,9 @@ type ConnectionService struct {
 	// cfgPath enables config reload on Restart (mux fallback, network
 	// change); empty keeps the construction-time config.
 	cfgPath string
+	// mu serializes lifecycle ops against watchdog-triggered restarts.
+	mu          sync.Mutex
+	watchCancel context.CancelFunc
 }
 
 // NewConnectionService creates the service.
@@ -31,6 +35,31 @@ func NewConnectionService(store *storage.Store, reg *core.Registry, cfg config.C
 
 // SetConfigPath enables config reload before restarts.
 func (s *ConnectionService) SetConfigPath(path string) { s.cfgPath = path }
+
+// startWatchdogs launches the network-change and mux-fallback watchers.
+// They survive the Up's operation context (the core is detached) and are
+// cancelled on Down or by the next restart.
+func (s *ConnectionService) startWatchdogs(parent context.Context) {
+	s.stopWatchdogs()
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
+	s.watchCancel = cancel
+	go WatchNetwork(ctx, platform.DefaultIface, 5*time.Second, func() {
+		_, _ = s.Restart(ctx)
+	})
+	if s.cfg.Features.Multiplex == "auto" {
+		go WatchMux(ctx, s.paths.LogFile, func() {
+			_, _ = s.RestartWithoutMux(ctx)
+		})
+	}
+}
+
+// stopWatchdogs cancels the running watchers, if any.
+func (s *ConnectionService) stopWatchdogs() {
+	if s.watchCancel != nil {
+		s.watchCancel()
+		s.watchCancel = nil
+	}
+}
 
 func (s *ConnectionService) options() core.Options {
 	return core.Options{
@@ -59,6 +88,12 @@ func (s *ConnectionService) options() core.Options {
 
 // Up starts the VPN for the given profile (or the active one).
 func (s *ConnectionService) Up(ctx context.Context, profileRef string) (core.RunInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.up(ctx, profileRef)
+}
+
+func (s *ConnectionService) up(ctx context.Context, profileRef string) (core.RunInfo, error) {
 	if !platform.IsPrivileged() {
 		return core.RunInfo{}, domain.ErrNotPrivileged
 	}
@@ -109,6 +144,7 @@ func (s *ConnectionService) Up(ctx context.Context, profileRef string) (core.Run
 			return core.RunInfo{}, fmt.Errorf("kill switch: %w", err)
 		}
 	}
+	s.startWatchdogs(ctx)
 	return info, nil
 }
 
@@ -126,6 +162,8 @@ func (s *ConnectionService) RestartWithoutMux(ctx context.Context) (core.RunInfo
 }
 
 func (s *ConnectionService) restart(ctx context.Context, noMux bool) (core.RunInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	st, err := s.store.LoadState()
 	if err != nil {
 		return core.RunInfo{}, err
@@ -137,10 +175,10 @@ func (s *ConnectionService) restart(ctx context.Context, noMux bool) (core.RunIn
 	if err := s.reloadConfig(noMux); err != nil {
 		return core.RunInfo{}, err
 	}
-	if err := s.Down(ctx); err != nil && !errors.Is(err, domain.ErrNotRunning) {
+	if err := s.down(ctx); err != nil && !errors.Is(err, domain.ErrNotRunning) {
 		return core.RunInfo{}, err
 	}
-	return s.Up(ctx, profileID)
+	return s.up(ctx, profileID)
 }
 
 // reloadConfig refreshes s.cfg from disk when cfgPath is known.
@@ -160,6 +198,13 @@ func (s *ConnectionService) reloadConfig(noMux bool) error {
 
 // Down stops the running VPN and clears state.
 func (s *ConnectionService) Down(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.down(ctx)
+}
+
+func (s *ConnectionService) down(ctx context.Context) error {
+	s.stopWatchdogs()
 	st, err := s.store.LoadState()
 	if err != nil {
 		return err
