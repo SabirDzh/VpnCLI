@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/app"
 	"github.com/SabirDzh/VpnCLI/internal/domain"
@@ -217,6 +219,34 @@ func TestSubsCounts(t *testing.T) {
 	out := strip(ns.(*subscriptions.Model).View(80, 20))
 	if !strings.Contains(out, "3 profiles") {
 		t.Fatalf("must show counts, got:\n%s", out)
+	}
+}
+
+// TestFitsMinimalTerminal pins the minimum-window contract: at 60×20
+// every rendered line — menu and every page — stays within 60 cells.
+func TestFitsMinimalTerminal(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 60, 20)
+	checkLines(t, m.render())
+	for i := 0; i < menuCount; i++ {
+		nm, _ := m.Update(keyPress(fmt.Sprintf("%d", i+1)))
+		mm := nm.(*Model)
+		if mm.page == nil {
+			t.Fatalf("page %d must open", i)
+		}
+		checkLines(t, mm.render())
+		nm, _ = mm.Update(shared.BackMsg{})
+		m = nm.(*Model)
+	}
+}
+
+// checkLines fails if any rendered line exceeds 60 cells (ANSI-aware).
+func checkLines(t *testing.T, view string) {
+	t.Helper()
+	for i, line := range strings.Split(strings.TrimRight(view, "\n"), "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Fatalf("line %d is %d cells (>60): %q", i, w, strip(line))
+		}
 	}
 }
 

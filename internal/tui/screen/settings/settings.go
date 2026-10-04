@@ -175,12 +175,12 @@ func (m *Model) clamp() {
 // Title implements shared.Screen.
 func (m *Model) Title() string { return "Settings" }
 
-// Keys implements shared.Screen.
+// Keys implements shared.Screen. esc/back is appended by the root
+// footer, so it is not declared here.
 func (m *Model) Keys() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter/space", "toggle or edit")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
 }
 
@@ -347,7 +347,7 @@ func (m *Model) View(width, height int) string {
 	for i, r := range visible {
 		idx := m.offset + i
 		if r.section != "" {
-			b.WriteString(m.styles.Dim.Render("── "+r.section+" ──") + "\n")
+			b.WriteString(m.styles.Section.Render("── "+r.section+" ──") + "\n")
 			continue
 		}
 		dot := ""
@@ -358,8 +358,8 @@ func (m *Model) View(width, height int) string {
 				dot = m.styles.Err.Render("● ")
 			}
 		}
-		rowText := fmt.Sprintf("  %s%-14s %s", dot, r.label,
-			m.styles.Value.Render(shared.Truncate(r.value, width-22)))
+		rowText := "  " + dot + m.styles.FieldLabel.Render(fmt.Sprintf("%-14s", r.label)) +
+			" " + m.styles.Value.Render(shared.Truncate(r.value, width-22))
 		if idx == m.cursor && r.kind != kindNone {
 			rowText = m.styles.SelectedRow.Render(strings.TrimLeft(rowText, " "))
 		}

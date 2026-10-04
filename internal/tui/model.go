@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/other"
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/profiles"
@@ -242,13 +243,14 @@ func (m *Model) menu() string {
 		head := fmt.Sprintf("%d. %s", i+1, r.title)
 		head += strings.Repeat(" ", max(0, 18-len([]rune(head))))
 		summary := shared.Truncate(r.summary, w-5-18-2)
-		plain := "  " + head + "  " + summary
-		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
+			plain := "  " + head + "  " + summary
+			plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 			plain = m.styles.ActiveMark.Render("> ") + plain[2:]
 			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
 		} else {
-			b.WriteString(m.styles.Dim.Render(plain) + "\n")
+			b.WriteString("  " + m.styles.MenuTitle.Render(head) + "  " +
+				m.styles.MenuSummary.Render(summary) + "\n")
 		}
 	}
 	return b.String()
@@ -347,8 +349,12 @@ func (m *Model) footer() string {
 		m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit"),
 		m.styles.Key.Render("?")+" "+m.styles.Help.Render("help"),
 	)
-	foot := strings.Join(parts, " | ")
-	return foot
+	// narrow windows drop hints from the right: ? opens the full help,
+	// so its inline hint is the first to go.
+	for lipgloss.Width(strings.Join(parts, " | ")) > m.width && len(parts) > 2 {
+		parts = parts[:len(parts)-1]
+	}
+	return strings.Join(parts, " | ")
 }
 
 func (m *Model) fullHelp() string {

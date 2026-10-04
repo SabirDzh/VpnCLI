@@ -26,6 +26,10 @@ type Styles struct {
 	Key         lipgloss.Style
 	Label       lipgloss.Style
 	Value       lipgloss.Style
+	MenuTitle   lipgloss.Style
+	MenuSummary lipgloss.Style
+	Section     lipgloss.Style
+	FieldLabel  lipgloss.Style
 }
 
 // protocolColors maps protocols to badge colors.
@@ -54,11 +58,15 @@ func Default() Styles {
 		Banner:      lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 		HeaderBar:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Padding(0, 1),
 		Logo:        lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")),
-		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("14")),
+		SelectedRow: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
 		ActiveMark:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")),
 		Key:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
-		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Width(10),
+		Label:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")).Width(10),
 		Value:       lipgloss.NewStyle().Foreground(lipgloss.Color("15")),
+		MenuTitle:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")),
+		MenuSummary: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")),
+		Section:     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("8")),
+		FieldLabel:  lipgloss.NewStyle().Bold(true),
 	}
 	return s
 }

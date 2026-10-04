@@ -457,8 +457,9 @@ func (m *Model) View(width, height int) string {
 			if p.ID == m.activeID {
 				mark = m.styles.ActiveMark.Render("* ")
 			}
-			row := fmt.Sprintf("%s%d. %-18s %s  %s",
-				mark, i+1, shared.Truncate(p.Name, 18),
+			row := fmt.Sprintf("%s%d. %s %s  %s",
+				mark, i+1,
+				m.styles.FieldLabel.Render(fmt.Sprintf("%-18s", shared.Truncate(p.Name, 18))),
 				m.styles.ProtoBadge(protoUpper(p.Protocol)),
 				m.styles.Dim.Render(shortSource(p.Source)),
 			)

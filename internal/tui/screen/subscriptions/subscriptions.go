@@ -335,7 +335,7 @@ func (m *Model) View(_, _ int) string {
 	if len(m.list) == 0 {
 		b.WriteString(m.styles.Dim.Render("Нет подписок. Добавь через: vpn sub add <имя> <url>") + "\n")
 	} else {
-		b.WriteString(m.styles.Dim.Render(fmt.Sprintf("%-22s %10s  %s", "NAME", "PROFILES", "UPDATED")) + "\n")
+		b.WriteString(m.styles.FieldLabel.Render(fmt.Sprintf("%-22s %10s  %s", "NAME", "PROFILES", "UPDATED")) + "\n")
 	}
 	for i, s := range m.list {
 		cursor := "  "
@@ -353,7 +353,9 @@ func (m *Model) View(_, _ int) string {
 		if !s.LastUpdated.IsZero() {
 			updated = s.LastUpdated.Format("02.01 15:04")
 		}
-		row := fmt.Sprintf("%s%-20s %3d profiles  %s", cursor, name, m.counts[domain.SubscriptionSource(s.ID)], updated)
+		row := fmt.Sprintf("%s%s %3d profiles  %s",
+			cursor, m.styles.FieldLabel.Render(fmt.Sprintf("%-20s", name)),
+			m.counts[domain.SubscriptionSource(s.ID)], updated)
 		if i == m.cursor {
 			row = m.styles.SelectedRow.Render(row)
 		}

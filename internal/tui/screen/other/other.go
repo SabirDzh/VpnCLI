@@ -168,9 +168,10 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
 	b.WriteString(m.styles.Title.Render("Other") + "\n\n")
-	b.WriteString(m.styles.Dim.Render("── About ──") + "\n")
+	b.WriteString(m.styles.Section.Render("── About ──") + "\n")
 	row := func(label, value string) {
-		b.WriteString("  " + fmt.Sprintf("%-14s %s", label, m.styles.Value.Render(value)) + "\n")
+		b.WriteString("  " + m.styles.FieldLabel.Render(fmt.Sprintf("%-14s", label)) +
+			" " + m.styles.Value.Render(value) + "\n")
 	}
 	ver := m.deps.Version
 	if ver == "" {
@@ -179,7 +180,7 @@ func (m *Model) View(width, height int) string {
 	row("version", ver)
 	row("repository", repoURL(m.deps.Repo))
 	row("developer", "Sabir Dzhabrailov")
-	b.WriteString("\n" + m.styles.Dim.Render("── Updates ──") + "\n")
+	b.WriteString("\n" + m.styles.Section.Render("── Updates ──") + "\n")
 	latest := m.latest
 	if latest == "" {
 		latest = "press c to check"
@@ -188,7 +189,7 @@ func (m *Model) View(width, height int) string {
 	row("last check", dateOrNever(m.deps.Update))
 	row("last update", dateOrNever2(m.deps.Update))
 	row("auto-updates", onOff(m.auto))
-	b.WriteString("\n" + m.styles.Dim.Render("автообновление проверяет релизы при каждом запуске vpn (cli и tui)") + "\n")
+	b.WriteString("\n" + m.styles.Dim.Render("автообновление проверяет релизы при каждом запуске") + "\n")
 	if t := m.toast.View(); t != "" {
 		b.WriteString("\n" + t + "\n")
 	}
