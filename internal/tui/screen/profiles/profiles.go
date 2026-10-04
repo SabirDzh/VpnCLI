@@ -17,6 +17,7 @@ import (
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
 	"github.com/SabirDzh/VpnCLI/internal/platform"
+	"github.com/SabirDzh/VpnCLI/internal/subscription/uri"
 	"github.com/SabirDzh/VpnCLI/internal/tui/component"
 	"github.com/SabirDzh/VpnCLI/internal/tui/shared"
 	"github.com/SabirDzh/VpnCLI/internal/tui/theme"
@@ -48,8 +49,9 @@ type Model struct {
 	// fileImport marks the input as a config-file path (i key).
 	fileImport bool
 	// injectables for tests.
-	readClipboard func() (string, error)
-	readFile      func(string) ([]byte, error)
+	readClipboard  func() (string, error)
+	readFile       func(string) ([]byte, error)
+	writeClipboard func(string) error
 	cursor        int
 	offset        int
 	filter        string
@@ -67,6 +69,7 @@ func New(ctx context.Context, conn shared.ConnectionAPI, profiles shared.Profile
 		input:         component.NewInput(st),
 		readClipboard: platform.ReadClipboard,
 		readFile:      os.ReadFile,
+		writeClipboard: platform.WriteClipboard,
 	}
 }
 
@@ -81,6 +84,8 @@ func (m *Model) Keys() []key.Binding {
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add profile")),
 		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "import file")),
 		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "paste uri")),
+		key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy uri")),
+		key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "copy all uris")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit profile")),
 		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete profile")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
@@ -297,6 +302,48 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		}
 		m.input.Open("URI профиля (из буфера):", text)
 		return m, nil
+	case "y", "Y":
+		if m.busy {
+			return m, nil
+		}
+		var targets []domain.Profile
+		if k == "y" {
+			it, ok := m.selected()
+			if !ok {
+				return m, nil
+			}
+			if p, err := m.findProfile(it.ID); err == nil {
+				targets = append(targets, p)
+			} else {
+				targets = append(targets, it)
+			}
+		} else {
+			targets = m.items
+		}
+		if len(targets) == 0 {
+			return m, nil
+		}
+		var lines []string
+		var errs int
+		for _, p := range targets {
+			u, err := uri.ToURI(p)
+			if err != nil {
+				errs++
+				continue
+			}
+			lines = append(lines, u)
+		}
+		if len(lines) == 0 {
+			return m, m.showToast("Нечего копировать: профили без URI", false)
+		}
+		if err := m.writeClipboard(strings.Join(lines, "\n")); err != nil {
+			return m, m.showToast("Буфер обмена: "+err.Error(), false)
+		}
+		msg := fmt.Sprintf("Скопировано: %d", len(lines))
+		if errs > 0 {
+			msg += fmt.Sprintf(" (пропущено %d)", errs)
+		}
+		return m, m.showToast(msg, true)
 	case "e":
 		it, ok := m.selected()
 		if !ok || m.busy {

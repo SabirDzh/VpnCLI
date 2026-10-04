@@ -310,3 +310,28 @@ func TestConfirmFlushLeft(t *testing.T) {
 	}
 	t.Fatalf("confirm box must start at column 0:\n%s", out)
 }
+
+func TestCopySelectedURI(t *testing.T) {
+	var got string
+	m, _, _ := testModel()
+	m.writeClipboard = func(s string) error { got = s; return nil }
+	ns, _ := m.Update(tea.KeyPressMsg{Code: 'y'})
+	_ = ns
+	if !strings.Contains(got, "vless://") {
+		t.Fatalf("clipboard = %q", got)
+	}
+	if !strings.Contains(m.View(80, 24), "Скопировано") {
+		t.Fatal("must toast copy success")
+	}
+}
+
+func TestCopyAllURIs(t *testing.T) {
+	var got string
+	m, _, _ := testModel()
+	m.writeClipboard = func(s string) error { got = s; return nil }
+	ns, _ := m.Update(tea.KeyPressMsg{Code: 'Y'})
+	_ = ns
+	if n := strings.Count(got, "\n") + 1; n < 2 {
+		t.Fatalf("expected all uris, got %q", got)
+	}
+}

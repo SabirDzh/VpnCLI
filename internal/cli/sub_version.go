@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -79,8 +81,43 @@ func NewSubCmd(d Deps) *cobra.Command {
 				return nil
 			},
 		},
+		&cobra.Command{
+			Use:   "export",
+			Short: "Export subscription URLs (share)",
+			Args:  cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				outPath, _ := cmd.Flags().GetString("out")
+				list, err := d.Sub.List()
+				if err != nil {
+					return err
+				}
+				var lines []string
+				for _, s := range list {
+					lines = append(lines, fmt.Sprintf("%s %s", s.Name, s.URL))
+				}
+				return exportOutput(cmd, outPath, lines)
+			},
+		},
 	)
+	for _, sub := range c.Commands() {
+		if sub.Name() == "export" {
+			sub.Flags().String("out", "", "write to file instead of stdout")
+		}
+	}
 	return c
+}
+
+// exportOutput writes the given lines to stdout, a file or the clipboard.
+func exportOutput(cmd *cobra.Command, outPath string, lines []string) error {
+	body := strings.Join(lines, "\n")
+	if body != "" {
+		body += "\n"
+	}
+	if outPath != "" {
+		return os.WriteFile(outPath, []byte(body), 0o600)
+	}
+	fmt.Fprint(cmd.OutOrStdout(), body)
+	return nil
 }
 
 // NewVersionCmd prints CLI and core versions.

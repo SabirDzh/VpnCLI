@@ -10,6 +10,7 @@ import (
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
 	"github.com/SabirDzh/VpnCLI/internal/platform"
+	"github.com/SabirDzh/VpnCLI/internal/subscription/uri"
 )
 
 // NewProfileCmd groups profile management commands.
@@ -110,10 +111,75 @@ func NewProfileCmd(d Deps) *cobra.Command {
 				return nil
 			},
 		},
+		&cobra.Command{
+			Use:   "export <id|name>",
+			Short: "Export profile URI (share)",
+			Args:  cobra.MaximumNArgs(1),
+			RunE: func(cmd *cobra.Command, args []string) error {
+				all, _ := cmd.Flags().GetBool("all")
+				toClip, _ := cmd.Flags().GetBool("clipboard")
+				outPath, _ := cmd.Flags().GetString("out")
+				var uris []string
+				if all {
+					list, err := d.Profile.List()
+					if err != nil {
+						return err
+					}
+					for _, p := range list {
+						u, err := uri.ToURI(p)
+						if err != nil {
+							fmt.Fprintf(cmd.ErrOrStderr(), "skip %s: %v\n", p.Name, err)
+							continue
+						}
+						uris = append(uris, u)
+					}
+				} else {
+					if len(args) != 1 {
+						return fmt.Errorf("export requires an id|name or --all")
+					}
+					list, err := d.Profile.List()
+					if err != nil {
+						return err
+					}
+					var found *domain.Profile
+					for i := range list {
+						if list[i].ID == args[0] || strings.EqualFold(list[i].Name, args[0]) {
+							found = &list[i]
+							break
+						}
+					}
+					if found == nil {
+						return fmt.Errorf("profile not found: %s", args[0])
+					}
+					u, err := uri.ToURI(*found)
+					if err != nil {
+						return err
+					}
+					uris = append(uris, u)
+				}
+				if toClip {
+					return platform.WriteClipboard(strings.Join(uris, "\n"))
+				}
+				return exportOutput(cmd, outPath, uris)
+			},
+		},
 	)
-	c.Commands()[0].Flags().Bool("file", false, "import profile or native core config from file")
-	c.Commands()[0].Flags().Bool("clipboard", false, "import profile or native core config from clipboard")
-	c.Commands()[0].Flags().String("protocol", string(domain.ProtocolVLESS), "protocol hint for raw --file import")
+	cmdFor := func(use string) *cobra.Command {
+		for _, sub := range c.Commands() {
+			if sub.Name() == use {
+				return sub
+			}
+		}
+		return nil
+	}
+	addCmd := cmdFor("add")
+	addCmd.Flags().Bool("file", false, "import profile or native core config from file")
+	addCmd.Flags().Bool("clipboard", false, "import profile or native core config from clipboard")
+	addCmd.Flags().String("protocol", string(domain.ProtocolVLESS), "protocol hint for raw --file import")
+	exportCmd := cmdFor("export")
+	exportCmd.Flags().Bool("all", false, "export every profile, one URI per line")
+	exportCmd.Flags().Bool("clipboard", false, "copy URIs to the clipboard")
+	exportCmd.Flags().String("out", "", "write URIs to file instead of stdout")
 	return c
 }
 

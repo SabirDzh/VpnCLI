@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
+	"github.com/SabirDzh/VpnCLI/internal/platform"
 	"github.com/SabirDzh/VpnCLI/internal/tui/component"
 	"github.com/SabirDzh/VpnCLI/internal/tui/shared"
 	"github.com/SabirDzh/VpnCLI/internal/tui/theme"
@@ -42,20 +43,23 @@ type Model struct {
 	editStep int
 	editName string
 	pending  domain.Subscription
-	width    int
+	// writeClipboard is injectable for tests.
+	writeClipboard func(string) error
+	width          int
 }
 
 // New creates the Subscriptions tab.
 func New(deps shared.Deps, st theme.Styles) *Model {
 	return &Model{
-		profiles: deps.Profiles,
-		subs:     deps.Subs,
-		styles:   st,
-		errs:     map[string]string{},
-		spin:     spinner.New(spinner.WithSpinner(spinner.Dot)),
-		toast:    component.NewToast(st),
-		input:    component.NewInput(st),
-		confirm:  component.NewConfirm(st),
+		profiles:       deps.Profiles,
+		subs:           deps.Subs,
+		styles:         st,
+		errs:           map[string]string{},
+		spin:           spinner.New(spinner.WithSpinner(spinner.Dot)),
+		toast:          component.NewToast(st),
+		input:          component.NewInput(st),
+		confirm:        component.NewConfirm(st),
+		writeClipboard: platform.WriteClipboard,
 	}
 }
 
@@ -70,6 +74,7 @@ func (m *Model) Keys() []key.Binding {
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add subscription")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit subscription")),
 		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete subscription")),
+		key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "copy url")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	}
 }
@@ -181,6 +186,15 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, nil
 		}
 		return m, shared.FetchSubs(m.profiles, m.subs)
+	case "y":
+		if m.busy || !m.loaded || len(m.list) == 0 {
+			return m, nil
+		}
+		sub := m.list[m.cursor]
+		if err := m.writeClipboard(sub.URL); err != nil {
+			return m, m.showToast("Буфер обмена: "+err.Error(), false)
+		}
+		return m, m.showToast("Скопировано: "+sub.Name, true)
 	case "a":
 		if m.busy {
 			return m, nil
