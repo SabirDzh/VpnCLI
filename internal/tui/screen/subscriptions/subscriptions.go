@@ -154,6 +154,8 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 // View implements shared.Screen.
 func (m *Model) View(_, _ int) string {
 	var b strings.Builder
+	b.WriteString(m.styles.Title.Render(fmt.Sprintf("Subscriptions (%d)", len(m.list))) + "\n")
+	b.WriteString(m.styles.Dim.Render("u — обновить · U — обновить все") + "\n\n")
 	if !m.loaded {
 		return m.styles.Dim.Render("loading…") + "\n"
 	}
@@ -190,5 +192,5 @@ func (m *Model) View(_, _ int) string {
 	if t := m.toast.View(); t != "" {
 		b.WriteString(t + "\n")
 	}
-	return b.String()
+	return shared.IndentLines(b.String(), " ")
 }

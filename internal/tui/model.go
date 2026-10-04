@@ -186,8 +186,16 @@ func (m *Model) render() string {
 }
 
 // menu renders the main list with live summaries.
+// Rows breathe: 2-space indent, content clamped to [36,68] cells so the
+// highlight bar stays uniform on wide terminals.
 func (m *Model) menu() string {
-	var b strings.Builder
+	w := m.width - 6
+	if w < 36 {
+		w = 36
+	}
+	if w > 68 {
+		w = 68
+	}
 	rows := []struct {
 		title   string
 		summary string
@@ -196,16 +204,16 @@ func (m *Model) menu() string {
 		{"Profiles", m.profilesSummary()},
 		{"Subscriptions", m.subsSummary()},
 	}
+	var b strings.Builder
 	for i, r := range rows {
-		cursor := "  "
+		plain := fmt.Sprintf("  %-14s %s", r.title, shared.Truncate(r.summary, w-18))
+		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
-			cursor = m.styles.ActiveMark.Render("> ")
+			plain = m.styles.ActiveMark.Render(">") + plain[2:]
+			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
+		} else {
+			b.WriteString(m.styles.Dim.Render(plain) + "\n")
 		}
-		row := fmt.Sprintf("%s%-14s %s", cursor, r.title, m.styles.Dim.Render(r.summary))
-		if i == m.cursor {
-			row = m.styles.SelectedRow.Render(row)
-		}
-		b.WriteString(row + "\n")
 	}
 	return b.String()
 }

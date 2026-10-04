@@ -203,5 +203,5 @@ func (m *Model) View(width, height int) string {
 	if t := m.toast.View(); t != "" {
 		b.WriteString(t + "\n")
 	}
-	return b.String()
+	return shared.IndentLines(b.String(), " ")
 }

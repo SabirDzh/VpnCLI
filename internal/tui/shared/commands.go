@@ -2,6 +2,7 @@ package shared
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/key"
@@ -45,6 +46,32 @@ func ScheduleTick(d time.Duration) tea.Cmd {
 // Back returns to the main menu.
 func Back() tea.Cmd {
 	return func() tea.Msg { return BackMsg{} }
+}
+
+// IndentLines prefixes every line of s (ANSI-safe: prefix added raw).
+func IndentLines(s, prefix string) string {
+	if s == "" {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		if l != "" {
+			lines[i] = prefix + l
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// Truncate shortens s to at most n runes, adding … on cut.
+func Truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n <= 1 {
+		return "…"
+	}
+	return string(r[:n-1]) + "…"
 }
 
 // DoUp connects the given profile.

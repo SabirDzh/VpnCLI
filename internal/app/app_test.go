@@ -161,3 +161,25 @@ func TestDownForeignProcessNeedsSudo(t *testing.T) {
 		t.Fatalf("expected not-privileged, got %v", err)
 	}
 }
+
+func TestStatusShowsActiveWhileStopped(t *testing.T) {
+	st := testStore(t)
+	cfg, _ := config.Load("", nil)
+	paths := platform.Paths{DataDir: t.TempDir(), RuntimeDir: t.TempDir(), StateFile: filepath.Join(t.TempDir(), "state.json")}
+	svc := NewConnectionService(st, core.NewRegistry(), cfg, paths)
+	psvc := NewProfileService(st)
+	p, err := psvc.AddFromURI("trojan://pw@h.example:443#one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := psvc.Use(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	view, err := svc.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view.Running || view.ProfileName != "one" || view.ProfileID == "" {
+		t.Fatalf("must expose active profile while stopped: %+v", view)
+	}
+}

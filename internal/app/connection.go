@@ -115,24 +115,38 @@ func (s *ConnectionService) Down(ctx context.Context) error {
 	return s.store.ClearState()
 }
 
-// Status describes the current connection.
+// Status describes the current connection. The active profile is always
+// resolved, so callers know what Up would dial even while disconnected.
 func (s *ConnectionService) Status(ctx context.Context) (StatusView, error) {
 	st, err := s.store.LoadState()
 	if err != nil {
 		return StatusView{}, err
 	}
+	view := StatusView{}
+	if active, err := s.store.ActiveProfile(); err == nil {
+		view.ProfileID = active.ID
+		view.ProfileName = active.Name
+		view.Endpoint = fmt.Sprintf("%s:%d", active.Endpoint.Host, active.Endpoint.Port)
+	}
 	if st == nil {
-		return StatusView{Running: false}, nil
+		return view, nil
 	}
 	if !platform.Alive(st.PID) {
 		// Stale pid file (e.g. reboot or kill): clean up and report stopped.
 		_ = s.store.ClearState()
-		return StatusView{Running: false, StalePID: st.PID}, nil
+		view.StalePID = st.PID
+		return view, nil
 	}
-	view := StatusView{Running: true, Core: st.Core, PID: st.PID, Since: st.StartedAt, ProfileID: st.ProfileID}
-	if p, err := s.store.GetProfile(st.ProfileID); err == nil {
-		view.ProfileName = p.Name
-		view.Endpoint = fmt.Sprintf("%s:%d", p.Endpoint.Host, p.Endpoint.Port)
+	view.Running = true
+	view.Core = st.Core
+	view.PID = st.PID
+	view.Since = st.StartedAt
+	if st.ProfileID != "" {
+		view.ProfileID = st.ProfileID
+		if p, err := s.store.GetProfile(st.ProfileID); err == nil {
+			view.ProfileName = p.Name
+			view.Endpoint = fmt.Sprintf("%s:%d", p.Endpoint.Host, p.Endpoint.Port)
+		}
 	}
 	return view, nil
 }

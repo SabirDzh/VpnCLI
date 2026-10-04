@@ -267,10 +267,12 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 // View implements shared.Screen.
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
+	b.WriteString(m.styles.Title.Render(fmt.Sprintf("Profiles (%d)", len(m.list.Items()))) + "\n")
+	b.WriteString(m.styles.Dim.Render("enter — выбрать · c — выбрать и подключить · / — фильтр") + "\n\n")
 	if !m.loaded {
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
 	} else {
-		b.WriteString(m.list.View() + "\n")
+		b.WriteString(shared.IndentLines(m.list.View(), " ") + "\n")
 	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render(m.errText) + "\n")
@@ -281,5 +283,5 @@ func (m *Model) View(width, height int) string {
 	if m.confirm.Showing() {
 		b.WriteString("\n" + m.confirm.View(width))
 	}
-	return b.String()
+	return shared.IndentLines(b.String(), " ")
 }
