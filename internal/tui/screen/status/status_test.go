@@ -121,6 +121,56 @@ func TestViewStates(t *testing.T) {
 	}
 }
 
+func TestViewTitleAlways(t *testing.T) {
+	conn := &testutil.FakeConn{}
+	st := New(context.Background(), conn, theme.Default(), false)
+	if out := stripAnsi(st.View(80, 24)); !strings.Contains(out, "Status") {
+		t.Fatalf("must render title, got:\n%s", out)
+	}
+	ns, _ := st.Update(shared.StatusMsg{St: app.StatusView{Running: true, ProfileName: "home"}})
+	if out := stripAnsi(ns.(*Model).View(80, 24)); !strings.Contains(out, "Status") {
+		t.Fatalf("title must persist, got:\n%s", out)
+	}
+}
+
+func TestViewInfoPanel(t *testing.T) {
+	conn := &testutil.FakeConn{}
+	st := New(context.Background(), conn, theme.Default(), false)
+	// running: bordered panel with rows
+	ns, _ := st.Update(shared.StatusMsg{St: app.StatusView{
+		Running: true, ProfileName: "home", Core: "sing-box", PID: 42,
+		Endpoint: "h:443", Since: time.Now().Add(-2 * time.Minute),
+	}})
+	view := ns.(*Model).View(80, 24)
+	if !strings.Contains(view, "╭") {
+		t.Fatalf("connected must render bordered panel:\n%s", view)
+	}
+	out := stripAnsi(view)
+	for _, want := range []string{"profile", "core", "pid 42", "uptime", "endpoint"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	// disconnected with active profile: show what enter would dial
+	ns, _ = st.Update(shared.StatusMsg{St: app.StatusView{ProfileName: "home", Endpoint: "h:443"}})
+	view = ns.(*Model).View(80, 24)
+	if !strings.Contains(view, "╭") {
+		t.Fatalf("disconnected must render bordered panel:\n%s", view)
+	}
+	out = stripAnsi(view)
+	for _, want := range []string{"profile", "home", "endpoint", "h:443"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	// disconnected without profile: no panel, no rows
+	ns, _ = st.Update(shared.StatusMsg{St: app.StatusView{}})
+	view = ns.(*Model).View(80, 24)
+	if strings.Contains(view, "╭") {
+		t.Fatalf("empty state must not render panel:\n%s", view)
+	}
+}
+
 func TestOpDoneUpRefreshes(t *testing.T) {
 	conn := &testutil.FakeConn{}
 	st := New(context.Background(), conn, theme.Default(), false)

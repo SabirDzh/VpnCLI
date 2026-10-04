@@ -1,10 +1,6 @@
 package component
 
 import (
-	"strings"
-
-	"charm.land/lipgloss/v2"
-
 	"github.com/SabirDzh/VpnCLI/internal/tui/theme"
 )
 
@@ -22,11 +18,12 @@ type Confirm struct {
 func NewConfirm(st theme.Styles) Confirm { return Confirm{styles: st} }
 
 // Ask shows the dialog. tag identifies the pending action for the owner.
+// The cursor starts on Yes: opening the dialog already expresses intent.
 func (c *Confirm) Ask(title, tag string) {
 	c.title = title
 	c.tag = tag
 	c.show = true
-	c.cursor = false
+	c.cursor = true
 }
 
 // Showing reports whether the dialog is on screen.
@@ -44,31 +41,17 @@ func (c *Confirm) Resolve() (string, bool) {
 	return c.tag, c.cursor
 }
 
-// View renders the modal box.
-func (c Confirm) View(width int) string {
+// View renders the modal box, left-aligned like the input modal.
+func (c Confirm) View() string {
 	if !c.show {
 		return ""
 	}
-	yes, no := "[ No ]", "[Yes]"
-	if c.cursor {
-		yes, no = "[Yes]", "[ No ]"
+	yes, no := "[Yes]", "[ No ]"
+	if !c.cursor {
+		yes, no = c.styles.Dim.Render("[Yes]"), c.styles.SelectedRow.Render("[ No ]")
+	} else {
+		yes, no = c.styles.SelectedRow.Render("[Yes]"), c.styles.Dim.Render("[ No ]")
 	}
 	body := c.title + "\n\n" + no + "  " + yes + "\n\n" + c.styles.Dim.Render("←/→ или tab — выбор, enter — ок")
-	box := c.styles.Box.Render(body)
-	// center horizontally
-	lines := strings.Split(box, "\n")
-	w := 0
-	for _, l := range lines {
-		if lw := lipgloss.Width(l); lw > w {
-			w = lw
-		}
-	}
-	pad := (width - w) / 2
-	if pad < 0 {
-		pad = 0
-	}
-	for i, l := range lines {
-		lines[i] = strings.Repeat(" ", pad) + l
-	}
-	return strings.Join(lines, "\n")
+	return c.styles.Box.Render(body)
 }

@@ -227,11 +227,58 @@ func TestDeleteSubFlow(t *testing.T) {
 	if !mm.confirm.Showing() {
 		t.Fatal("x must ask confirm")
 	}
-	ns, _ = mm.Update(tea.KeyPressMsg{Code: tea.KeyRight})
-	ns, cmd := ns.Update(kfEnter())
+	ns, cmd := mm.Update(kfEnter())
 	_ = cmd()
 	if len(subs.Removed) != 1 || subs.Removed[0] != "s1" {
 		t.Fatalf("Removed = %v", subs.Removed)
 	}
 	_ = ns
+}
+
+func TestEditSubFlow(t *testing.T) {
+	subs := &testutil.FakeSubs{Items: []domain.Subscription{{ID: "s1", Name: "one", URL: "https://old/1"}}}
+	prof := &testutil.FakeProfiles{}
+	m := New(shared.Deps{Profiles: prof, Subs: subs}, theme.Default())
+	ns, _ := m.Update(shared.SubsMsg{Subs: subs.Items, Counts: map[string]int{}})
+	ns, _ = ns.Update(kf('e'))
+	mm := ns.(*Model)
+	if mm.editStep != 1 {
+		t.Fatal("e must start edit at name step")
+	}
+	if got := mm.input.Value(); got != "one" {
+		t.Fatalf("name prefilled = %q", got)
+	}
+	ns, _ = mm.Update(kfEnter())
+	mm = ns.(*Model)
+	if mm.editStep != 2 {
+		t.Fatal("enter must advance to url step")
+	}
+	if got := mm.input.Value(); got != "https://old/1" {
+		t.Fatalf("url prefilled = %q", got)
+	}
+	_, cmd := mm.Update(kfEnter())
+	_ = cmd()
+	if len(subs.Edited) != 1 {
+		t.Fatalf("Edited = %+v", subs.Edited)
+	}
+	e := subs.Edited[0]
+	if e.ID != "s1" || e.Name != "one" || e.Value != "https://old/1" {
+		t.Fatalf("Edited = %+v", subs.Edited)
+	}
+	ns, _ = ns.Update(shared.OpDoneMsg{Op: "sub-edit", Label: "one"})
+	if out := ns.(*Model).toast.View(); !strings.Contains(out, "Изменена") {
+		t.Fatalf("toast = %q", out)
+	}
+}
+
+func TestConfirmFlushLeft(t *testing.T) {
+	m, _ := testModel()
+	ns, _ := m.Update(kf('x'))
+	out := ns.(*Model).View(80, 24)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "╭") {
+			return
+		}
+	}
+	t.Fatalf("confirm box must start at column 0:\n%s", out)
 }

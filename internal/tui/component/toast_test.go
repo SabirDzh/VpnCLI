@@ -53,21 +53,21 @@ func TestConfirm(t *testing.T) {
 	if !c.Showing() || c.Tag() != "delete" {
 		t.Fatal("must show with tag")
 	}
-	if !strings.Contains(c.View(80), "Удалить?") {
+	if !strings.Contains(c.View(), "Удалить?") {
 		t.Fatal("must render title")
 	}
-	c.Move() // cursor -> Yes
 	tag, ok := c.Resolve()
 	if tag != "delete" || !ok {
-		t.Fatal("must resolve Yes with tag")
+		t.Fatal("must resolve Yes with tag by default")
 	}
 	if c.Showing() {
 		t.Fatal("must hide after resolve")
 	}
-	c.Ask("Ещё?", "x") // cursor defaults to No
+	c.Ask("Ещё?", "x")
+	c.Move() // cursor -> No
 	_, ok = c.Resolve()
 	if ok {
-		t.Fatal("must resolve No")
+		t.Fatal("must resolve No after move")
 	}
 }
 

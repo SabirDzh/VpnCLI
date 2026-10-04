@@ -1,6 +1,6 @@
 // Package subscriptions implements the Subscriptions tab: subscription
-// list with profile counts, single/all refresh with per-row spinner,
-// result toasts. Row errors never crash the UI.
+// list with profile counts, add/edit/delete (a, e, x), single/all refresh
+// with per-row spinner, result toasts. Row errors never crash the UI.
 package subscriptions
 
 import (
@@ -38,8 +38,11 @@ type Model struct {
 	// inputStep drives the two-step add: 0 idle, 1 name, 2 url.
 	inputStep int
 	tmpName   string
-	pending   domain.Subscription
-	width     int
+	// editStep drives the two-step edit form: 0 idle, 1 name, 2 url.
+	editStep int
+	editName string
+	pending  domain.Subscription
+	width    int
 }
 
 // New creates the Subscriptions tab.
@@ -65,6 +68,7 @@ func (m *Model) Keys() []key.Binding {
 		key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "update selected")),
 		key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "update all")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add subscription")),
+		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit subscription")),
 		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete subscription")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	}
@@ -77,6 +81,9 @@ func (m *Model) Init() tea.Cmd { return shared.FetchSubs(m.profiles, m.subs) }
 func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	if m.confirm.Showing() {
 		return m.updateConfirm(msg)
+	}
+	if m.editStep != 0 {
+		return m.updateEdit(msg)
 	}
 	if m.inputStep != 0 {
 		return m.updateInput(msg)
@@ -129,6 +136,13 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 				shared.FetchSubs(m.profiles, m.subs),
 			)
 		}
+		if msg.Op == "sub-edit" {
+			delete(m.errs, msg.Label)
+			return m, tea.Batch(
+				m.showToast("Изменена: "+msg.Label, true),
+				shared.FetchSubs(m.profiles, m.subs),
+			)
+		}
 		cmds = append(cmds, m.showToast(fmt.Sprintf("Обновлено профилей: %d", msg.N), true))
 		return m, tea.Batch(cmds...)
 	case shared.ToastExpiredMsg:
@@ -174,6 +188,15 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		m.inputStep = 1
 		m.tmpName = ""
 		m.input.Open("Имя подписки:", "")
+		return m, nil
+	case "e":
+		if m.busy || !m.loaded || len(m.list) == 0 {
+			return m, nil
+		}
+		sub := m.list[m.cursor]
+		m.pending = sub
+		m.editStep = 1
+		m.input.Open("Имя подписки:", sub.Name)
 		return m, nil
 	case "x":
 		if m.busy || !m.loaded || len(m.list) == 0 {
@@ -265,6 +288,42 @@ func (m *Model) updateConfirm(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	return m, nil
 }
 
+// updateEdit drives the two-step edit form: name, then URL.
+func (m *Model) updateEdit(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	kp, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch kp.String() {
+	case "enter":
+		if m.editStep == 1 {
+			name := m.input.Value()
+			if name == "" {
+				return m, nil
+			}
+			m.editName = name
+			m.editStep = 2
+			m.input.Open("URL подписки:", m.pending.URL)
+			return m, nil
+		}
+		url := m.input.Value()
+		m.editStep = 0
+		m.input.Close()
+		if url == "" {
+			url = m.pending.URL
+		}
+		m.busy = true
+		return m, shared.DoSubEdit(m.subs, m.pending.ID, m.editName, url, m.pending.Name)
+	case "esc":
+		m.editStep = 0
+		m.input.Close()
+		return m, nil
+	default:
+		m.input.Key(kp.String())
+		return m, nil
+	}
+}
+
 // View implements shared.Screen.
 func (m *Model) View(_, _ int) string {
 	var b strings.Builder
@@ -309,11 +368,13 @@ func (m *Model) View(_, _ int) string {
 	if t := m.toast.View(); t != "" {
 		b.WriteString(t + "\n")
 	}
-	if m.confirm.Showing() {
-		b.WriteString("\n" + m.confirm.View(m.width))
-	}
 	if m.inputStep != 0 {
 		b.WriteString("\n" + m.input.View())
 	}
-	return shared.IndentLines(b.String(), " ")
+	out := shared.IndentLines(b.String(), " ")
+	// the confirm box hugs the left edge, outside the page indent
+	if m.confirm.Showing() {
+		out += "\n" + m.confirm.View()
+	}
+	return out
 }

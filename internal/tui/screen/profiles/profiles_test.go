@@ -78,9 +78,8 @@ func TestConnectChain(t *testing.T) {
 	if !m2.confirm.Showing() {
 		t.Fatal("must ask for confirm")
 	}
-	// confirm Yes -> use -> up chain (cursor starts at No, move right first)
-	nsR, _ := m2.Update(kf("right"))
-	ns3, cmd := nsR.Update(kf("enter"))
+	// confirm defaults to Yes -> use -> up chain
+	ns3, cmd := m2.Update(kf("enter"))
 	_ = cmd()
 	m3 := ns3.(*Model)
 	if !m3.busy {
@@ -245,11 +244,69 @@ func TestDeleteProfileFlow(t *testing.T) {
 	if !mm.confirm.Showing() {
 		t.Fatal("x must ask confirm")
 	}
-	ns, _ = mm.Update(kf("right"))
-	ns, cmd := ns.Update(kf("enter"))
+	ns, cmd := mm.Update(kf("enter"))
 	_ = cmd()
 	if len(prof.Removed) != 1 || prof.Removed[0] != "z9" {
 		t.Fatalf("Removed = %v", prof.Removed)
 	}
 	_ = ns
+}
+
+func TestEditProfileFlow(t *testing.T) {
+	m, _, prof := testModel()
+	ns, _ := m.Update(kf("e"))
+	mm := ns.(*Model)
+	if !mm.input.Showing() {
+		t.Fatal("e must open edit form")
+	}
+	if got := mm.input.Value(); got != "home" {
+		t.Fatalf("name prefilled = %q", got)
+	}
+	mm = typeText(mm, "X")
+	ns, _ = mm.Update(kf("enter"))
+	mm = ns.(*Model)
+	if !mm.input.Showing() {
+		t.Fatal("must advance to uri step")
+	}
+	ns, cmd := mm.Update(kf("enter"))
+	if cmd == nil {
+		t.Fatal("enter must submit")
+	}
+	_ = cmd()
+	if len(prof.Edited) != 1 {
+		t.Fatalf("Edited = %+v", prof.Edited)
+	}
+	e := prof.Edited[0]
+	if e.ID != "a1" || e.Name != "homeX" || e.Value != "" {
+		t.Fatalf("Edited = %+v", prof.Edited)
+	}
+	ns, _ = ns.Update(shared.OpDoneMsg{Op: "edit", Label: "homeX"})
+	if out := ns.(*Model).toast.View(); !strings.Contains(out, "Изменён") {
+		t.Fatalf("toast = %q", out)
+	}
+}
+
+func TestEditSubscriptionOwnedRefused(t *testing.T) {
+	m, _, _ := testModel()
+	m.cursor = 1 // "work" comes from a subscription
+	ns, _ := m.Update(kf("e"))
+	mm := ns.(*Model)
+	if mm.input.Showing() {
+		t.Fatal("must not edit subscription-owned profile")
+	}
+	if out := mm.toast.View(); !strings.Contains(out, "подписк") {
+		t.Fatalf("toast = %q", out)
+	}
+}
+
+func TestConfirmFlushLeft(t *testing.T) {
+	m, _, _ := testModel()
+	ns, _ := m.Update(kf("x"))
+	out := ns.(*Model).View(80, 24)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "╭") {
+			return
+		}
+	}
+	t.Fatalf("confirm box must start at column 0:\n%s", out)
 }

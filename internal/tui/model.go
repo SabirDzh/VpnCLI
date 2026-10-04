@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/SabirDzh/VpnCLI/internal/tui/screen/other"
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/profiles"
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/settings"
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/status"
@@ -21,12 +22,14 @@ const (
 	minHeight = 20
 )
 
-// Menu entries. Order is stable: status, profiles, subscriptions, settings.
+// Menu entries. Order is stable: status, profiles, subscriptions,
+// settings, other.
 const (
 	menuStatus = iota
 	menuProfiles
 	menuSubs
 	menuSettings
+	menuOther
 	menuCount
 )
 
@@ -61,7 +64,8 @@ func NewModel(ctx context.Context, deps shared.Deps) *Model {
 		status.New(ctx, deps.Connection, st, deps.ReadOnly),
 		profiles.New(ctx, deps.Connection, deps.Profiles, st, deps.ReadOnly),
 		subscriptions.New(deps, st),
-		settings.New(deps.Settings, st),
+		settings.New(deps.SettingsAPI, deps.Settings, st),
+		other.New(deps, st),
 	}
 	return m
 }
@@ -158,7 +162,7 @@ func (m *Model) menuKey(k string) tea.Cmd {
 		}
 	case "enter", "space":
 		return m.openPage(m.cursor)
-	case "1", "2", "3", "4":
+	case "1", "2", "3", "4", "5":
 		n := int(k[0] - '1')
 		if n >= 0 && n < len(m.pages) {
 			m.cursor = n
@@ -230,6 +234,7 @@ func (m *Model) menu() string {
 		{"Profiles", m.profilesSummary()},
 		{"Subscriptions", m.subsSummary()},
 		{"Settings", m.settingsSummary()},
+		{"Other", m.otherSummary()},
 	}
 	var b strings.Builder
 	for i, r := range rows {
@@ -279,6 +284,14 @@ func (m *Model) profilesSummary() string {
 
 func (m *Model) subsSummary() string {
 	return fmt.Sprintf("%d subs", len(m.subs.Subs))
+}
+
+func (m *Model) otherSummary() string {
+	ver := m.deps.Version
+	if ver == "" {
+		ver = "dev"
+	}
+	return "vpn " + ver
 }
 
 func (m *Model) settingsSummary() string {

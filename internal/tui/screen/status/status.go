@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
 	"github.com/SabirDzh/VpnCLI/internal/tui/component"
@@ -173,30 +174,22 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 func (m *Model) View(width, height int) string {
 	m.width = width
 	var b strings.Builder
+	b.WriteString(m.styles.Title.Render("Status") + "\n\n")
 	switch {
 	case m.busy:
 		fmt.Fprintf(&b, "%s %s…\n", m.spin.View(), m.busyOp)
 		b.WriteString(m.styles.Dim.Render("операция выполняется, подожди") + "\n")
 	case m.st.running:
-		b.WriteString(m.styles.OK.Bold(true).Render("● connected") + "\n")
+		b.WriteString(m.styles.OK.Bold(true).Render("● connected") + "\n\n")
+		b.WriteString(m.infoPanel() + "\n")
 	default:
 		b.WriteString(m.styles.Dim.Render("○ disconnected") + "\n")
+		// an active profile exists: show what enter would dial
+		if m.st.name != "" {
+			b.WriteString("\n" + m.infoPanel() + "\n")
+		}
 	}
 	b.WriteString("\n")
-	if m.st.running {
-		row := func(label, value string) {
-			b.WriteString(m.styles.Label.Render(label) + m.styles.Value.Render(value) + "\n")
-		}
-		row("profile", m.st.name)
-		row("core", fmt.Sprintf("%s · pid %d", m.st.core, m.st.pid))
-		if !m.st.since.IsZero() {
-			row("uptime", time.Since(m.st.since).Round(time.Second).String())
-		}
-		if m.st.endpoint != "" {
-			row("endpoint", m.st.endpoint)
-		}
-		b.WriteString("\n")
-	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render("! "+m.errText) + "\n\n")
 	}
@@ -204,4 +197,30 @@ func (m *Model) View(width, height int) string {
 		b.WriteString(t + "\n")
 	}
 	return shared.IndentLines(b.String(), " ")
+}
+
+// infoPanel renders the bordered connection summary rows.
+func (m *Model) infoPanel() string {
+	row := func(label, value string) string {
+		return m.styles.Label.Render(label) + m.styles.Value.Render(value)
+	}
+	var rows []string
+	if m.st.running {
+		rows = append(rows,
+			row("profile", m.st.name),
+			row("core", fmt.Sprintf("%s · pid %d", m.st.core, m.st.pid)),
+		)
+		if !m.st.since.IsZero() {
+			rows = append(rows, row("uptime", time.Since(m.st.since).Round(time.Second).String()))
+		}
+		if m.st.endpoint != "" {
+			rows = append(rows, row("endpoint", m.st.endpoint))
+		}
+	} else {
+		rows = append(rows, row("profile", m.st.name))
+		if m.st.endpoint != "" {
+			rows = append(rows, row("endpoint", m.st.endpoint))
+		}
+	}
+	return m.styles.Box.Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }

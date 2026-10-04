@@ -1,6 +1,7 @@
 // Package profiles implements the Profiles tab: plain cursor list styled
 // like the main menu, activation (enter), activation with connect (c, with
-// reconnect confirm), manual refresh (r) and substring filter (/).
+// reconnect confirm), manual refresh (r), add/edit/delete (a, e, x) and
+// substring filter (/).
 // Secrets (UUID, passwords, hosts) never reach the list rows.
 package profiles
 
@@ -37,13 +38,16 @@ type Model struct {
 	confirm         component.Confirm
 	toast           component.Toast
 	input           component.Input
-	pending         domain.Profile // target awaiting confirm verdict
-	cursor          int
-	offset          int
-	filter          string
-	filtering       bool
-	width           int
-	height          int
+	pending         domain.Profile // target awaiting confirm verdict or being edited
+	// editStep drives the two-step edit form: 0 idle, 1 name, 2 uri.
+	editStep  int
+	editName  string
+	cursor    int
+	offset    int
+	filter    string
+	filtering bool
+	width     int
+	height    int
 }
 
 // New creates the Profiles tab.
@@ -64,6 +68,7 @@ func (m *Model) Keys() []key.Binding {
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "use profile")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "use + connect")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add profile")),
+		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit profile")),
 		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete profile")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
@@ -128,6 +133,9 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	if m.confirm.Showing() {
 		return m.updateConfirm(msg)
 	}
+	if m.editStep != 0 {
+		return m.updateEdit(msg)
+	}
 	if m.input.Showing() {
 		return m.updateInput(msg)
 	}
@@ -173,16 +181,19 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 				m.showToast("Подключено: "+msg.Label, true),
 				shared.FetchProfiles(m.profiles),
 			)
-		case "add", "remove":
+		case "add", "edit", "remove":
 			m.busy = false
-			if msg.Op == "add" {
-				return m, tea.Batch(
-					m.showToast("Добавлен: "+msg.Label, true),
-					shared.FetchProfiles(m.profiles),
-				)
+			var label string
+			switch msg.Op {
+			case "add":
+				label = "Добавлен: "
+			case "edit":
+				label = "Изменён: "
+			default:
+				label = "Удалён: "
 			}
 			return m, tea.Batch(
-				m.showToast("Удалён: "+msg.Label, true),
+				m.showToast(label+msg.Label, true),
 				shared.FetchProfiles(m.profiles),
 			)
 		default:
@@ -255,6 +266,18 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, nil
 		}
 		m.input.Open("URI профиля:", "")
+		return m, nil
+	case "e":
+		it, ok := m.selected()
+		if !ok || m.busy {
+			return m, nil
+		}
+		if it.Source != domain.ManualSource {
+			return m, m.showToast(shared.DescribeError(domain.ErrProfileManaged), false)
+		}
+		m.pending = it
+		m.editStep = 1
+		m.input.Open("Имя профиля:", it.Name)
 		return m, nil
 	case "x":
 		it, ok := m.selected()
@@ -367,6 +390,39 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	}
 }
 
+// updateEdit drives the two-step edit form: name, then URI.
+func (m *Model) updateEdit(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	kp, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch kp.String() {
+	case "enter":
+		if m.editStep == 1 {
+			name := m.input.Value()
+			if name == "" {
+				return m, nil
+			}
+			m.editName = name
+			m.editStep = 2
+			m.input.Open("Новый URI (пусто — оставить):", "")
+			return m, nil
+		}
+		uriStr := m.input.Value()
+		m.editStep = 0
+		m.input.Close()
+		m.busy = true
+		return m, shared.DoProfileEdit(m.profiles, m.pending.ID, m.editName, uriStr, m.pending.Name)
+	case "esc":
+		m.editStep = 0
+		m.input.Close()
+		return m, nil
+	default:
+		m.input.Key(kp.String())
+		return m, nil
+	}
+}
+
 func (m *Model) showToast(text string, ok bool) tea.Cmd {
 	return m.toast.Show(text, ok, func(id int) tea.Msg {
 		return shared.ToastExpiredMsg{ID: id}
@@ -421,14 +477,16 @@ func (m *Model) View(width, height int) string {
 	if t := m.toast.View(); t != "" {
 		b.WriteString(t + "\n")
 	}
-	if m.confirm.Showing() {
-		b.WriteString("\n" + m.confirm.View(width))
-	}
 	if m.input.Showing() {
 		b.WriteString("\n" + m.input.View())
 	}
 	_ = height
-	return shared.IndentLines(b.String(), " ")
+	out := shared.IndentLines(b.String(), " ")
+	// the confirm box hugs the left edge, outside the page indent
+	if m.confirm.Showing() {
+		out += "\n" + m.confirm.View()
+	}
+	return out
 }
 
 func protoUpper(p domain.Protocol) string {
