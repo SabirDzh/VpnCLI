@@ -21,6 +21,7 @@ type Deps struct {
 	Settings    SettingsInfo
 	SettingsAPI SettingsAPI
 	Update      UpdateAPI
+	Stats       StatsAPI
 	Version     string
 	Repo        string
 	ReadOnly    bool
@@ -99,6 +100,13 @@ type UpdateAPI interface {
 	Update(ctx context.Context, tag string) error
 	LastCheck() time.Time
 	LastUpdated() time.Time
+}
+
+// StatsAPI is the subset of StatsService the TUI needs. It may be nil:
+// pages render without the Stats section then.
+type StatsAPI interface {
+	Totals(ctx context.Context) (app.Traffic, error)
+	TailLog(n int) []string
 }
 
 // ConnectionAPI is the subset of ConnectionService the TUI needs.

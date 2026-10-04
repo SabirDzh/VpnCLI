@@ -24,6 +24,7 @@ type Deps struct {
 	Conn        *app.ConnectionService
 	Update      *app.UpdateService
 	SettingsSvc *app.SettingsService
+	StatsSvc    *app.StatsService
 	Version     string
 	Repo        string
 }

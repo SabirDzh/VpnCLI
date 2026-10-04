@@ -41,6 +41,7 @@ func NewTUICmd(d Deps) *cobra.Command {
 				Settings:    buildSettingsInfo(d.Config, d.Paths),
 				SettingsAPI: settingsAPI{svc: d.SettingsSvc, cfgPath: d.ConfigPath, paths: d.Paths},
 				Update:      updateAPI{svc: d.Update},
+				Stats:       d.StatsSvc,
 				Version:     d.Version,
 				Repo:        d.Repo,
 				ReadOnly:    !platform.IsPrivileged(),

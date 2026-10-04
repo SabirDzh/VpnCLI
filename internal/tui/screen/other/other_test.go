@@ -3,6 +3,7 @@
 package other
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -154,3 +155,65 @@ func TestDatesRender(t *testing.T) {
 type errFail struct{}
 
 func (errFail) Error() string { return "fail" }
+
+// fakeOtherStats is an in-memory shared.StatsAPI for the Other page.
+type fakeOtherStats struct {
+	up, down int64
+	active   int
+	log      []string
+	err      error
+}
+
+func (f *fakeOtherStats) Totals(ctx context.Context) (app.Traffic, error) {
+	if f.err != nil {
+		return app.Traffic{}, f.err
+	}
+	return app.Traffic{Up: f.up, Down: f.down, Active: f.active, Blocked: 7}, nil
+}
+
+func (f *fakeOtherStats) TailLog(n int) []string { return f.log }
+
+func TestStatsSectionRenders(t *testing.T) {
+	_, _, deps := testDeps()
+	deps.Stats = &fakeOtherStats{up: 2048, down: 3 * 1024 * 1024, active: 5,
+		log: []string{"INFO line one", "INFO line two"}}
+	m := New(deps, theme.Default())
+	ns, _ := m.Update(statsDoneMsg{t: app.Traffic{Up: 2048, Down: 3 * 1024 * 1024, Active: 5, Blocked: 7}})
+	out := ns.(*Model).View(80, 24)
+	for _, want := range []string{"── Stats ──", "2.0 KB", "3.0 MB", "blocked", "7"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestLogViewer(t *testing.T) {
+	_, _, deps := testDeps()
+	deps.Stats = &fakeOtherStats{log: []string{"first log line", "second log line"}}
+	m := New(deps, theme.Default())
+	ns, _ := m.Update(kf('l'))
+	mm := ns.(*Model)
+	out := mm.View(80, 24)
+	if !strings.Contains(out, "first log line") || !strings.Contains(out, "Logs") {
+		t.Fatalf("log view missing:\n%s", out)
+	}
+	ns, _ = mm.Update(kf('\x1b'))
+	mm = ns.(*Model)
+	if mm.showLogs {
+		t.Fatal("esc must close log view")
+	}
+	if !strings.Contains(mm.View(80, 24), "── About ──") {
+		t.Fatal("esc must return to the main Other view")
+	}
+}
+
+func TestStatsErrorRendered(t *testing.T) {
+	_, _, deps := testDeps()
+	deps.Stats = &fakeOtherStats{err: context.DeadlineExceeded}
+	m := New(deps, theme.Default())
+	ns, _ := m.Update(statsDoneMsg{err: context.DeadlineExceeded})
+	out := ns.(*Model).View(80, 24)
+	if !strings.Contains(out, "нет данных") {
+		t.Fatalf("stats error must render:\n%s", out)
+	}
+}

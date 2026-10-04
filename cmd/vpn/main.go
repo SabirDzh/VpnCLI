@@ -90,6 +90,7 @@ func run() error {
 	}
 	connSvc.SetConfigPath(configPath)
 	settingsSvc := app.NewSettingsService(configPath)
+	statsSvc := app.NewStatsService("127.0.0.1:9090", paths.LogFile)
 
 	root := cli.NewRootCmd(cli.Deps{
 		Config:      cfg,
@@ -102,6 +103,7 @@ func run() error {
 		Conn:        connSvc,
 		Update:      updateSvc,
 		SettingsSvc: settingsSvc,
+		StatsSvc:    statsSvc,
 		Version:     version,
 		Repo:        "SabirDzh/VpnCLI",
 	})

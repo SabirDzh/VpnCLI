@@ -36,10 +36,15 @@ type Model struct {
 	styles theme.Styles
 	toast  component.Toast
 	// openURL is overridable for tests.
-	openURL func(string) error
-	latest  string
-	auto    bool
-	width   int
+	openURL  func(string) error
+	latest   string
+	auto     bool
+	width    int
+	// stats snapshot + log view state.
+	totals   app.Traffic
+	statsErr string
+	showLogs bool
+	logs     []string
 }
 
 // New creates the Other tab.
@@ -62,17 +67,41 @@ func (m *Model) Title() string { return "Other" }
 
 // Keys implements shared.Screen.
 func (m *Model) Keys() []key.Binding {
-	return []key.Binding{
+	keys := []key.Binding{
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "check updates")),
 		key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "install update")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "auto-updates on/off")),
 		key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open repository")),
-		key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 	}
+	if m.deps.Stats != nil {
+		keys = append(keys, key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "logs")))
+	}
+	keys = append(keys, key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")))
+	return keys
 }
 
-// Init implements shared.Screen.
-func (m *Model) Init() tea.Cmd { return nil }
+// Init implements shared.Screen. Stats poll only while the page is open.
+func (m *Model) Init() tea.Cmd {
+	if m.deps.Stats == nil {
+		return nil
+	}
+	return tea.Batch(fetchStats(m.deps.Stats), shared.ScheduleTick(2*time.Second))
+}
+
+// statsDoneMsg resolves a stats refresh.
+type statsDoneMsg struct {
+	t   app.Traffic
+	err error
+}
+
+func fetchStats(api shared.StatsAPI) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		t, err := api.Totals(ctx)
+		return statsDoneMsg{t: t, err: err}
+	}
+}
 
 // Update implements shared.Screen.
 func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
@@ -94,6 +123,23 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	case shared.ToastExpiredMsg:
 		m.toast.Expire(msg.ID)
 		return m, nil
+	case statsDoneMsg:
+		if msg.err != nil {
+			m.statsErr = shared.DescribeError(msg.err)
+		} else {
+			m.statsErr = ""
+			m.totals = msg.t
+		}
+		return m, shared.ScheduleTick(2 * time.Second)
+	case shared.TickMsg:
+		if m.deps.Stats == nil {
+			return m, nil
+		}
+		cmds := []tea.Cmd{fetchStats(m.deps.Stats), shared.ScheduleTick(2 * time.Second)}
+		if m.showLogs {
+			m.logs = m.deps.Stats.TailLog(200)
+		}
+		return m, tea.Batch(cmds...)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		return m, nil
@@ -145,7 +191,20 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, m.showToast("Ошибка: "+err.Error(), false)
 		}
 		return m, m.showToast("Открываю "+url, true)
+	case "l":
+		if m.deps.Stats == nil {
+			return m, nil
+		}
+		m.showLogs = !m.showLogs
+		if m.showLogs {
+			m.logs = m.deps.Stats.TailLog(200)
+		}
+		return m, nil
 	case "esc":
+		if m.showLogs {
+			m.showLogs = false
+			return m, nil
+		}
 		return m, shared.Back()
 	}
 	return m, nil
@@ -167,6 +226,13 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 // View implements shared.Screen.
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
+	if m.showLogs {
+		b.WriteString(m.styles.Title.Render("Logs") + m.styles.Dim.Render(" (esc — назад)") + "\n\n")
+		for _, line := range m.logs {
+			b.WriteString("  " + shared.Truncate(line, width-4) + "\n")
+		}
+		return shared.IndentLines(b.String(), " ")
+	}
 	b.WriteString(m.styles.Title.Render("Other") + "\n\n")
 	b.WriteString(m.styles.Section.Render("── About ──") + "\n")
 	row := func(label, value string) {
@@ -189,6 +255,17 @@ func (m *Model) View(width, height int) string {
 	row("last check", dateOrNever(m.deps.Update))
 	row("last update", dateOrNever2(m.deps.Update))
 	row("auto-updates", onOff(m.auto))
+	if m.deps.Stats != nil {
+		b.WriteString("\n" + m.styles.Section.Render("── Stats ──") + "\n")
+		if m.statsErr != "" {
+			b.WriteString("  " + m.styles.Dim.Render("нет данных: "+m.statsErr) + "\n")
+		} else {
+			row("download", humanBytes(m.totals.Down))
+			row("upload", humanBytes(m.totals.Up))
+			row("connections", fmt.Sprintf("%d", m.totals.Active))
+			row("blocked", fmt.Sprintf("%d", m.totals.Blocked))
+		}
+	}
 	b.WriteString("\n" + m.styles.Dim.Render("автообновление проверяет релизы при каждом запуске") + "\n")
 	if t := m.toast.View(); t != "" {
 		b.WriteString("\n" + t + "\n")
@@ -196,6 +273,21 @@ func (m *Model) View(width, height int) string {
 	_ = width
 	_ = height
 	return shared.IndentLines(b.String(), " ")
+}
+
+// humanBytes renders a byte count with a readable unit.
+func humanBytes(n int64) string {
+	const k = 1024
+	switch {
+	case n >= k*k*k:
+		return fmt.Sprintf("%.1f GB", float64(n)/(k*k*k))
+	case n >= k*k:
+		return fmt.Sprintf("%.1f MB", float64(n)/(k*k))
+	case n >= k:
+		return fmt.Sprintf("%.1f KB", float64(n)/k)
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }
 
 func dateOrNever(u shared.UpdateAPI) string {
