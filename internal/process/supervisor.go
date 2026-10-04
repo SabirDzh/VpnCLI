@@ -24,7 +24,9 @@ func Start(ctx context.Context, bin string, args []string, logFile string) (int,
 	// fd intentionally left open in child; parent closes its copy.
 	defer lf.Close()
 
-	cmd := exec.CommandContext(ctx, bin, args...)
+	// The daemon outlives the request that started it (the TUI cancels its
+	// op context right after Up returns), so spawn without cancellation.
+	cmd := exec.CommandContext(context.WithoutCancel(ctx), bin, args...)
 	cmd.Stdout = lf
 	cmd.Stderr = lf
 	cmd.Stdin = nil
