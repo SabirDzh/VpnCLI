@@ -199,23 +199,32 @@ func (m *Model) menu() string {
 	rows := []struct {
 		title   string
 		summary string
+		action  string
 	}{
-		{"Status", m.statusSummary()},
-		{"Profiles", m.profilesSummary()},
-		{"Subscriptions", m.subsSummary()},
+		{"Status", m.statusSummary(), m.statusAction()},
+		{"Profiles", m.profilesSummary(), "open"},
+		{"Subscriptions", m.subsSummary(), "open"},
 	}
 	var b strings.Builder
 	for i, r := range rows {
-		plain := fmt.Sprintf("  %-14s %s", r.title, shared.Truncate(r.summary, w-18))
-		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
+		left := fmt.Sprintf("%-14s %s", r.title, shared.Truncate(r.summary, w-30))
+		gap := max(1, w-3-len([]rune(left))-len([]rune(r.action)))
+		plain := "  " + left + strings.Repeat(" ", gap) + r.action + " "
 		if i == m.cursor {
-			plain = m.styles.ActiveMark.Render(">") + plain[2:]
-			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n\n")
+			plain = m.styles.ActiveMark.Render("> ") + plain[2:]
+			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
 		} else {
-			b.WriteString(m.styles.Dim.Render(plain) + "\n\n")
+			b.WriteString(m.styles.Dim.Render(plain) + "\n")
 		}
 	}
 	return b.String()
+}
+
+func (m *Model) statusAction() string {
+	if m.st.Err == nil && m.st.St.Running {
+		return "disconnect"
+	}
+	return "connect"
 }
 
 func (m *Model) statusSummary() string {
@@ -293,7 +302,7 @@ func (m *Model) footer() string {
 		m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit"),
 		m.styles.Key.Render("?")+" "+m.styles.Help.Render("help"),
 	)
-	foot := "  " + strings.Join(parts, "   ")
+	foot := "  " + strings.Join(parts, " | ")
 	return foot
 }
 
