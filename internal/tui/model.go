@@ -199,17 +199,15 @@ func (m *Model) menu() string {
 	rows := []struct {
 		title   string
 		summary string
-		action  string
 	}{
-		{"Status", m.statusSummary(), m.statusAction()},
-		{"Profiles", m.profilesSummary(), "open"},
-		{"Subscriptions", m.subsSummary(), "open"},
+		{"Status", m.statusSummary()},
+		{"Profiles", m.profilesSummary()},
+		{"Subscriptions", m.subsSummary()},
 	}
 	var b strings.Builder
 	for i, r := range rows {
-		left := fmt.Sprintf("%-14s %s", r.title, shared.Truncate(r.summary, w-30))
-		gap := max(1, w-3-len([]rune(left))-len([]rune(r.action)))
-		plain := "  " + left + strings.Repeat(" ", gap) + r.action + " "
+		plain := fmt.Sprintf("  %-14s %s", r.title, shared.Truncate(r.summary, w-18))
+		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
 			plain = m.styles.ActiveMark.Render("> ") + plain[2:]
 			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
@@ -218,13 +216,6 @@ func (m *Model) menu() string {
 		}
 	}
 	return b.String()
-}
-
-func (m *Model) statusAction() string {
-	if m.st.Err == nil && m.st.St.Running {
-		return "disconnect"
-	}
-	return "connect"
 }
 
 func (m *Model) statusSummary() string {
