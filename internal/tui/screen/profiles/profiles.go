@@ -325,11 +325,12 @@ func (m *Model) View(width, height int) string {
 		b.WriteString("  " + m.styles.ActiveMark.Render("● "+m.activeName))
 	}
 	b.WriteString("\n\n")
-	if !m.loaded {
+	switch {
+	case !m.loaded:
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
-	} else if len(m.items) == 0 {
+	case len(m.items) == 0:
 		b.WriteString(m.styles.Dim.Render("Нет профилей. Добавь через: vpn profile add <uri>") + "\n")
-	} else {
+	default:
 		items := m.filtered()
 		if len(items) == 0 {
 			b.WriteString(m.styles.Dim.Render("Ничего не найдено — esc сбрасывает фильтр") + "\n")
