@@ -88,6 +88,7 @@ func run() error {
 	if configPath == "" {
 		configPath = filepath.Join(paths.ConfigDir, "config.yaml")
 	}
+	connSvc.SetConfigPath(configPath)
 	settingsSvc := app.NewSettingsService(configPath)
 
 	root := cli.NewRootCmd(cli.Deps{

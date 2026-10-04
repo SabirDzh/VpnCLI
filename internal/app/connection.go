@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,12 +19,18 @@ type ConnectionService struct {
 	registry *core.Registry
 	cfg      config.Config
 	paths    platform.Paths
+	// cfgPath enables config reload on Restart (mux fallback, network
+	// change); empty keeps the construction-time config.
+	cfgPath string
 }
 
 // NewConnectionService creates the service.
 func NewConnectionService(store *storage.Store, reg *core.Registry, cfg config.Config, paths platform.Paths) *ConnectionService {
 	return &ConnectionService{store: store, registry: reg, cfg: cfg, paths: paths}
 }
+
+// SetConfigPath enables config reload before restarts.
+func (s *ConnectionService) SetConfigPath(path string) { s.cfgPath = path }
 
 func (s *ConnectionService) options() core.Options {
 	return core.Options{
@@ -103,6 +110,52 @@ func (s *ConnectionService) Up(ctx context.Context, profileRef string) (core.Run
 		}
 	}
 	return info, nil
+}
+
+// Restart stops the running core and starts it again with reloaded
+// config. Sequential by design: two sing-box processes cannot share
+// the TUN device.
+func (s *ConnectionService) Restart(ctx context.Context) (core.RunInfo, error) {
+	return s.restart(ctx, false)
+}
+
+// RestartWithoutMux retries the run with multiplex disabled for this run
+// only (mux fallback; the setting on disk is untouched).
+func (s *ConnectionService) RestartWithoutMux(ctx context.Context) (core.RunInfo, error) {
+	return s.restart(ctx, true)
+}
+
+func (s *ConnectionService) restart(ctx context.Context, noMux bool) (core.RunInfo, error) {
+	st, err := s.store.LoadState()
+	if err != nil {
+		return core.RunInfo{}, err
+	}
+	if st == nil {
+		return core.RunInfo{}, domain.ErrNotRunning
+	}
+	profileID := st.ProfileID
+	if err := s.reloadConfig(noMux); err != nil {
+		return core.RunInfo{}, err
+	}
+	if err := s.Down(ctx); err != nil && !errors.Is(err, domain.ErrNotRunning) {
+		return core.RunInfo{}, err
+	}
+	return s.Up(ctx, profileID)
+}
+
+// reloadConfig refreshes s.cfg from disk when cfgPath is known.
+func (s *ConnectionService) reloadConfig(noMux bool) error {
+	if s.cfgPath != "" {
+		c, err := config.Load(s.cfgPath, nil)
+		if err != nil {
+			return err
+		}
+		s.cfg = c
+	}
+	if noMux {
+		s.cfg.Features.Multiplex = "off"
+	}
+	return nil
 }
 
 // Down stops the running VPN and clears state.
