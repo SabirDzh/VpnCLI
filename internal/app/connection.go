@@ -90,9 +90,18 @@ func (s *ConnectionService) Down(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if st == nil || !platform.Alive(st.PID) {
+	if st == nil {
+		return domain.ErrNotRunning
+	}
+	alive, permitted := platform.Signallable(st.PID)
+	if !alive {
 		_ = s.store.ClearState()
 		return domain.ErrNotRunning
+	}
+	if !permitted && !platform.IsPrivileged() {
+		// The daemon belongs to root (started via sudo); a user-space
+		// down can neither signal it nor report honestly otherwise.
+		return domain.ErrNotPrivileged
 	}
 	engine, err := s.registry.Get(st.Core)
 	if err != nil {

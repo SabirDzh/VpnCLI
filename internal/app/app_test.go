@@ -143,3 +143,21 @@ func TestSubCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDownForeignProcessNeedsSudo(t *testing.T) {
+	if isRoot() {
+		t.Skip("requires unprivileged user")
+	}
+	st := testStore(t)
+	cfg, _ := config.Load("", nil)
+	paths := platform.Paths{DataDir: t.TempDir(), RuntimeDir: t.TempDir(), StateFile: filepath.Join(t.TempDir(), "state.json")}
+	reg := core.NewRegistry()
+	svc := NewConnectionService(st, reg, cfg, paths)
+	// PID 1 exists but belongs to root: down must ask for sudo, not kill.
+	if err := st.SaveState(storage.State{Core: "sing-box", ProfileID: "p", PID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Down(context.Background()); !errors.Is(err, domain.ErrNotPrivileged) {
+		t.Fatalf("expected not-privileged, got %v", err)
+	}
+}

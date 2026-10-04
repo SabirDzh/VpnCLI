@@ -6,18 +6,27 @@ import "golang.org/x/sys/windows"
 
 // Alive reports whether pid is a live process via exit-code probe.
 func Alive(pid int) bool {
+	alive, _ := Signallable(pid)
+	return alive
+}
+
+// Signallable reports whether pid is live and openable.
+func Signallable(pid int) (alive, permitted bool) {
 	if pid <= 0 {
-		return false
+		return false, false
 	}
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
-		return false
+		return false, false
 	}
 	defer windows.CloseHandle(h)
 	var code uint32
 	if err := windows.GetExitCodeProcess(h, &code); err != nil {
-		return false
+		return false, false
 	}
 	const stillActive = 259 // STILL_ACTIVE
-	return code == stillActive
+	if code != stillActive {
+		return false, false
+	}
+	return true, true
 }
