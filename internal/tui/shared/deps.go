@@ -48,8 +48,11 @@ type SettingsInfo struct {
 	// Features (TUI-managed, applied on next connect).
 	Adblock      bool
 	TrackerBlock bool
+	SocialBlock  bool
+	KillSwitch   bool
 	SplitExclude []string
 	SplitInclude []string
+	AppFirewall  []string
 	// Update settings.
 	AutoUpdate bool
 }
@@ -58,8 +61,10 @@ type SettingsInfo struct {
 // file state after the last Set* call.
 type SettingsAPI interface {
 	Snapshot() SettingsInfo
-	SetAdblock(on bool) error
-	SetTrackerBlock(on bool) error
+	// SetBlocklist toggles a DNS blocklist kind: ads|trackers|social.
+	SetBlocklist(kind string, on bool) error
+	SetAppFirewall(apps []string) error
+	SetKillSwitch(on bool) error
 	SetSplit(exclude, include []string) error
 	SetAutoUpdate(on bool) error
 }

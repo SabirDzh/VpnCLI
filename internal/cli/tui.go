@@ -110,8 +110,11 @@ func buildSettingsInfo(cfg config.Config, paths platform.Paths) shared.SettingsI
 		LogFile:      paths.LogFile,
 		Adblock:      cfg.Features.Adblock,
 		TrackerBlock: cfg.Features.TrackerBlock,
+		SocialBlock:  cfg.Features.SocialBlock,
+		KillSwitch:   cfg.Features.KillSwitch,
 		SplitExclude: cfg.Features.SplitExclude,
 		SplitInclude: cfg.Features.SplitInclude,
+		AppFirewall:  cfg.Features.AppFirewall,
 		AutoUpdate:   cfg.Update.Auto,
 	}
 	if bin, err := singbox.FindBinary(info.SingBoxPath); err != nil {
@@ -139,13 +142,32 @@ func (a settingsAPI) Snapshot() shared.SettingsInfo {
 	return buildSettingsInfo(cfg, a.paths)
 }
 
-func (a settingsAPI) SetAdblock(on bool) error {
-	_, err := a.svc.Update(func(c *config.Config) { c.Features.Adblock = on })
+func (a settingsAPI) SetBlocklist(kind string, on bool) error {
+	switch kind {
+	case "ads", "trackers", "social":
+	default:
+		return fmt.Errorf("unknown blocklist kind %q", kind)
+	}
+	_, err := a.svc.Update(func(c *config.Config) {
+		switch kind {
+		case "ads":
+			c.Features.Adblock = on
+		case "trackers":
+			c.Features.TrackerBlock = on
+		case "social":
+			c.Features.SocialBlock = on
+		}
+	})
 	return err
 }
 
-func (a settingsAPI) SetTrackerBlock(on bool) error {
-	_, err := a.svc.Update(func(c *config.Config) { c.Features.TrackerBlock = on })
+func (a settingsAPI) SetAppFirewall(apps []string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.AppFirewall = apps })
+	return err
+}
+
+func (a settingsAPI) SetKillSwitch(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.KillSwitch = on })
 	return err
 }
 

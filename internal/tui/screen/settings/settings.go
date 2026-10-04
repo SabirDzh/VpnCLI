@@ -20,8 +20,9 @@ type rowKind int
 
 const (
 	kindNone rowKind = iota
-	kindAdblock
-	kindTracker
+	kindBlocklist
+	kindKillSwitch
+	kindAppFirewall
 	kindExclude
 	kindInclude
 )
@@ -33,6 +34,7 @@ type row struct {
 	value   string
 	ok      *bool // nil = neutral, else green/red dot
 	kind    rowKind
+	cat     string // blocklist kind for kindBlocklist rows
 }
 
 // Model is the Settings tab state.
@@ -101,8 +103,11 @@ func (m *Model) rebuild() {
 		{label: "strict route", value: onOff(info.StrictRoute)},
 		{label: "mixed proxy", value: fmt.Sprintf("127.0.0.1:%d", info.MixedPort)},
 		{section: "Features"},
-		{label: "adblock", value: onOff(info.Adblock), kind: kindAdblock},
-		{label: "trackerblock", value: onOff(info.TrackerBlock), kind: kindTracker},
+		{label: "adblock", value: onOff(info.Adblock), kind: kindBlocklist, cat: "ads"},
+		{label: "trackerblock", value: onOff(info.TrackerBlock), kind: kindBlocklist, cat: "trackers"},
+		{label: "socialblock", value: onOff(info.SocialBlock), kind: kindBlocklist, cat: "social"},
+		{label: "kill switch", value: onOff(info.KillSwitch), kind: kindKillSwitch},
+		{label: "app firewall", value: splitValue(info.AppFirewall), kind: kindAppFirewall},
 		{label: "split exclude", value: splitValue(info.SplitExclude), kind: kindExclude},
 		{label: "split include", value: splitValue(info.SplitInclude), kind: kindInclude},
 		{section: "App"},
@@ -238,10 +243,23 @@ func (m *Model) activate() (shared.Screen, tea.Cmd) {
 	}
 	var err error
 	switch r.kind {
-	case kindAdblock:
-		err = m.api.SetAdblock(!m.info.Adblock)
-	case kindTracker:
-		err = m.api.SetTrackerBlock(!m.info.TrackerBlock)
+	case kindBlocklist:
+		var cur bool
+		switch r.cat {
+		case "ads":
+			cur = m.info.Adblock
+		case "trackers":
+			cur = m.info.TrackerBlock
+		case "social":
+			cur = m.info.SocialBlock
+		}
+		err = m.api.SetBlocklist(r.cat, !cur)
+	case kindKillSwitch:
+		err = m.api.SetKillSwitch(!m.info.KillSwitch)
+	case kindAppFirewall:
+		m.editKind = kindAppFirewall
+		m.input.Open("App firewall (имена процессов через запятую):", strings.Join(m.info.AppFirewall, ", "))
+		return m, nil
 	case kindExclude:
 		m.editKind = kindExclude
 		m.input.Open("Split exclude (домены или CIDR через запятую):", strings.Join(m.info.SplitExclude, ", "))
@@ -288,6 +306,8 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		}
 		var err error
 		switch kind {
+		case kindAppFirewall:
+			err = m.api.SetAppFirewall(list)
 		case kindExclude:
 			err = m.api.SetSplit(list, m.info.SplitInclude)
 		case kindInclude:

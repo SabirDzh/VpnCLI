@@ -34,14 +34,26 @@ func kf(c byte) tea.Msg { return tea.KeyPressMsg{Code: rune(c)} }
 // downTo moves the cursor until it rests on a row of the given kind.
 func downTo(t *testing.T, m *Model, k rowKind) *Model {
 	t.Helper()
+	return downToLabel(t, m, func(r row) bool { return r.kind == k })
+}
+
+// downToCat moves the cursor until it rests on a blocklist row of the
+// given category.
+func downToCat(t *testing.T, m *Model, cat string) *Model {
+	t.Helper()
+	return downToLabel(t, m, func(r row) bool { return r.kind == kindBlocklist && r.cat == cat })
+}
+
+func downToLabel(t *testing.T, m *Model, match func(row) bool) *Model {
+	t.Helper()
 	for i := 0; i < 40; i++ {
-		if m.rows[m.cursor].kind == k {
+		if match(m.rows[m.cursor]) {
 			return m
 		}
 		ns, _ := m.Update(kf('j'))
 		m = ns.(*Model)
 	}
-	t.Fatalf("row kind %d not reached", k)
+	t.Fatal("target row not reached")
 	return m
 }
 
@@ -58,7 +70,7 @@ func TestRendersSections(t *testing.T) {
 func TestRendersFeatureRows(t *testing.T) {
 	m, _ := newModel(nil)
 	out := m.View(80, 40)
-	for _, want := range []string{"adblock", "trackerblock", "split exclude", "split include"} {
+	for _, want := range []string{"adblock", "trackerblock", "socialblock", "kill switch", "app firewall", "split exclude", "split include"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
@@ -80,12 +92,12 @@ func TestCoreError(t *testing.T) {
 
 func TestToggleAdblock(t *testing.T) {
 	m, api := newModel(nil)
-	m = downTo(t, m, kindAdblock)
+	m = downToCat(t, m, "ads")
 	ns, cmd := m.Update(tea.KeyPressMsg{Code: ' '})
 	mm := ns.(*Model)
 	_ = cmd
-	if len(api.AdblockCalls) != 1 || !api.AdblockCalls[0] {
-		t.Fatalf("AdblockCalls = %v", api.AdblockCalls)
+	if len(api.BlockCalls) != 1 || api.BlockCalls[0] != (fakes.BlockCall{Kind: "ads", On: true}) {
+		t.Fatalf("BlockCalls = %v", api.BlockCalls)
 	}
 	if out := mm.View(80, 40); !strings.Contains(out, "Сохранено") {
 		t.Fatalf("must toast save, got:\n%s", out)
@@ -96,10 +108,56 @@ func TestToggleAdblock(t *testing.T) {
 	}
 }
 
+func TestToggleSocialBlock(t *testing.T) {
+	m, api := newModel(nil)
+	m = downToCat(t, m, "social")
+	ns, _ := m.Update(tea.KeyPressMsg{Code: ' '})
+	_ = ns
+	if len(api.BlockCalls) != 1 || api.BlockCalls[0] != (fakes.BlockCall{Kind: "social", On: true}) {
+		t.Fatalf("BlockCalls = %v", api.BlockCalls)
+	}
+}
+
+func TestToggleKillSwitch(t *testing.T) {
+	m, api := newModel(nil)
+	m = downTo(t, m, kindKillSwitch)
+	if got := m.rows[m.cursor].value; got != "off" {
+		t.Fatalf("kill switch must start off, got %q", got)
+	}
+	ns, _ := m.Update(tea.KeyPressMsg{Code: ' '})
+	mm := ns.(*Model)
+	if len(api.KillSwitchCalls) != 1 || !api.KillSwitchCalls[0] {
+		t.Fatalf("KillSwitchCalls = %v", api.KillSwitchCalls)
+	}
+	if got := mm.rows[m.cursor].value; got != "on" {
+		t.Fatalf("kill switch must render on, got %q", got)
+	}
+}
+
+func TestEditAppFirewall(t *testing.T) {
+	m, api := newModel(nil)
+	m = downTo(t, m, kindAppFirewall)
+	ns, _ := m.Update(kf('\r'))
+	mm := ns.(*Model)
+	if !mm.input.Showing() {
+		t.Fatal("enter on app firewall row must open input")
+	}
+	ns, _ = mm.Update(kf('t'))
+	ns, _ = ns.Update(kf('o'))
+	_, cmd := ns.Update(kf('\r'))
+	if cmd == nil {
+		t.Fatal("enter must submit")
+	}
+	_ = cmd()
+	if len(api.AppFirewallCalls) != 1 || len(api.AppFirewallCalls[0]) != 1 || api.AppFirewallCalls[0][0] != "to" {
+		t.Fatalf("AppFirewallCalls = %v", api.AppFirewallCalls)
+	}
+}
+
 func TestToggleErrorToast(t *testing.T) {
 	api := &fakes.FakeSettings{Info: testInfo(), SetErr: errBoom{}}
 	m, _ := newModel(api)
-	m = downTo(t, m, kindAdblock)
+	m = downToCat(t, m, "ads")
 	ns, _ := m.Update(tea.KeyPressMsg{Code: ' '})
 	if out := ns.(*Model).View(80, 40); !strings.Contains(out, "Ошибка") {
 		t.Fatalf("must toast error:\n%s", out)
