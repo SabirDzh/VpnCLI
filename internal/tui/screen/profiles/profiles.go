@@ -52,23 +52,23 @@ type Model struct {
 	readClipboard  func() (string, error)
 	readFile       func(string) ([]byte, error)
 	writeClipboard func(string) error
-	cursor        int
-	offset        int
-	filter        string
-	filtering     bool
-	width         int
-	height        int
+	cursor         int
+	offset         int
+	filter         string
+	filtering      bool
+	width          int
+	height         int
 }
 
 // New creates the Profiles tab.
 func New(ctx context.Context, conn shared.ConnectionAPI, profiles shared.ProfileAPI, st theme.Styles, readOnly bool) *Model {
 	return &Model{
 		conn: conn, profiles: profiles, styles: st, readOnly: readOnly, ctx: ctx,
-		toast:         component.NewToast(st),
-		confirm:       component.NewConfirm(st),
-		input:         component.NewInput(st),
-		readClipboard: platform.ReadClipboard,
-		readFile:      os.ReadFile,
+		toast:          component.NewToast(st),
+		confirm:        component.NewConfirm(st),
+		input:          component.NewInput(st),
+		readClipboard:  platform.ReadClipboard,
+		readFile:       os.ReadFile,
 		writeClipboard: platform.WriteClipboard,
 	}
 }
