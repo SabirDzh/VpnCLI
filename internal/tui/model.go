@@ -171,9 +171,9 @@ func (m *Model) render() string {
 			"Окно слишком маленькое. Увеличь до 60×20.") + "\n"
 	}
 	var b strings.Builder
-	b.WriteString(m.header() + "\n")
+	b.WriteString(m.header())
 	if m.page != nil {
-		body := m.page.View(m.width, m.height-12)
+		body := m.page.View(m.width, m.height-13)
 		b.WriteString(body)
 		if !strings.HasSuffix(body, "\n") {
 			b.WriteString("\n")
@@ -181,7 +181,7 @@ func (m *Model) render() string {
 	} else {
 		b.WriteString(m.menu())
 	}
-	b.WriteString(m.footer())
+	b.WriteString("\n" + m.footer())
 	return b.String()
 }
 
@@ -210,9 +210,9 @@ func (m *Model) menu() string {
 		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
 			plain = m.styles.ActiveMark.Render(">") + plain[2:]
-			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
+			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n\n")
 		} else {
-			b.WriteString(m.styles.Dim.Render(plain) + "\n")
+			b.WriteString(m.styles.Dim.Render(plain) + "\n\n")
 		}
 	}
 	return b.String()
@@ -251,21 +251,13 @@ func (m *Model) subsSummary() string {
 }
 
 func (m *Model) header() string {
-	var crumbs []string
-	crumbs = append(crumbs, m.styles.HeaderBar.Render(" vpn "))
-	if m.page != nil {
-		crumbs = append(crumbs, m.styles.Tab.Render(m.page.Title()))
-	}
-	head := strings.Join(crumbs, " ")
-	if m.deps.ReadOnly {
-		head += "  " + m.styles.Banner.Render("[read-only: без root]")
-	}
 	logo := m.styles.Logo.Render(strings.Join(logoLines, "\n"))
-	logoRows := strings.Split(logo, "\n")
-	var b strings.Builder
-	b.WriteString(logoRows[0] + "   " + head + "\n")
-	b.WriteString(strings.Join(logoRows[1:], "\n"))
-	return b.String()
+	banner := ""
+	if m.deps.ReadOnly {
+		banner = m.styles.Banner.Render("  [read-only: без root]")
+	}
+	// air around the logo: blank line above and below
+	return "\n" + logo + banner + "\n"
 }
 
 // logoLines is the ASCII logo rendered in the header.
@@ -298,11 +290,10 @@ func (m *Model) footer() string {
 		)
 	}
 	parts = append(parts,
-		m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit (VPN stays on)"),
+		m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit"),
 		m.styles.Key.Render("?")+" "+m.styles.Help.Render("help"),
 	)
-	foot := strings.Join(parts, "  ")
-	foot += "\n" + m.styles.Dim.Render("Выход из TUI не выключает VPN")
+	foot := "  " + strings.Join(parts, "   ")
 	return foot
 }
 

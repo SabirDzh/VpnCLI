@@ -184,7 +184,7 @@ func (m *Model) View(_, _ int) string {
 		if i == m.cursor {
 			row = m.styles.SelectedRow.Render(row)
 		}
-		b.WriteString(row + "\n")
+		b.WriteString(row + "\n\n")
 	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render(m.errText) + "\n")

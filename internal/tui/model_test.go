@@ -274,7 +274,7 @@ func TestHeaderFooter(t *testing.T) {
 	deps, _, _, _ := testDeps()
 	m := sized(NewModel(context.Background(), deps), 80, 24)
 	out := strip(m.render())
-	for _, want := range []string{"╱", "Profiles", "quit (VPN stays on)", "не выключает VPN"} {
+	for _, want := range []string{"╱", "Profiles", "quit", "navigate"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}

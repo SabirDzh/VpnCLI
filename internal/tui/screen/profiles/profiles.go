@@ -54,7 +54,7 @@ func (i profileItem) FilterValue() string { return i.name + " " + i.protocol }
 type profileDelegate struct{ styles theme.Styles }
 
 func (d profileDelegate) Height() int                         { return 1 }
-func (d profileDelegate) Spacing() int                        { return 0 }
+func (d profileDelegate) Spacing() int                        { return 1 }
 func (d profileDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
 func (d profileDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
 	p, ok := item.(profileItem)
