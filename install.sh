@@ -57,7 +57,10 @@ ensure_singbox() {
   case "$OS" in
     darwin)
       have brew || { echo "need Homebrew to install sing-box: https://brew.sh" >&2; exit 1; }
-      HOMEBREW_NO_AUTO_UPDATE=1 brew install sing-box || brew install sing-box
+      # install exits 0 even when the keg is present but unlinked,
+      # so always (re)link afterwards; both are safe no-ops otherwise.
+      HOMEBREW_NO_AUTO_UPDATE=1 brew install sing-box || true
+      HOMEBREW_NO_AUTO_UPDATE=1 brew link --overwrite sing-box 2>/dev/null || true
       ;;
     linux)
       if have apt-get; then

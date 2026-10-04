@@ -42,10 +42,13 @@ function Install-SingBoxManual {
   $tmp = Join-Path $env:TEMP "singbox-install"
   New-Item -ItemType Directory -Force -Path $tmp | Out-Null
   try {
-    $tgz = Join-Path $tmp "sing-box.tar.gz"
-    Invoke-WebRequest "https://github.com/SagerNet/sing-box/releases/download/$tag/sing-box-$($tag.TrimStart('v'))-windows-$arch.tar.gz" -OutFile $tgz
-    tar -xzf "$tgz" -C "$tmp"
-    Copy-Item (Join-Path $tmp "sing-box.exe") (Join-Path $DestDir "sing-box.exe") -Force
+    $sb = Join-Path $tmp "sing-box.zip"
+    Invoke-WebRequest "https://github.com/SagerNet/sing-box/releases/download/$tag/sing-box-$($tag.TrimStart('v'))-windows-$arch.zip" -OutFile $sb
+    Expand-Archive -Path $sb -DestinationPath $tmp -Force
+    $exe = Get-ChildItem -Path $tmp -Recurse -Filter "sing-box.exe" | Select-Object -First 1
+    if (-not $exe) { throw "sing-box.exe not found in upstream archive" }
+    # Copy the whole folder (exe plus companion DLLs like libcronet.dll).
+    Copy-Item (Join-Path $exe.Directory.FullName "*") $DestDir -Force
     # TUN driver required next to sing-box.exe.
     $wintun = Join-Path $tmp "wintun.zip"
     Invoke-WebRequest "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile $wintun
