@@ -37,6 +37,8 @@ func (s *ConnectionService) options() core.Options {
 		LogLevel:     s.cfg.Log.Level,
 		Adblock:      s.cfg.Features.Adblock,
 		TrackerBlock: s.cfg.Features.TrackerBlock,
+		SocialBlock:  s.cfg.Features.SocialBlock,
+		AppFirewall:  s.cfg.Features.AppFirewall,
 		SplitExclude: s.cfg.Features.SplitExclude,
 		SplitInclude: s.cfg.Features.SplitInclude,
 	}
@@ -85,6 +87,15 @@ func (s *ConnectionService) Up(ctx context.Context, profileRef string) (core.Run
 	})
 	// Remember selection so `status` and subsequent `up` resolve it.
 	_, _ = s.store.SetActiveProfile(p.ID)
+	if s.cfg.Features.KillSwitch {
+		// Fail closed: without the pf anchor the tunnel would run
+		// unprotected, so a failed enable aborts the whole Up.
+		if err := platform.EnableKillSwitch(p.Endpoint.Host, int(p.Endpoint.Port)); err != nil {
+			_ = engine.Stop(ctx, core.RunInfo{PID: info.PID, ConfigPath: info.ConfigPath, Core: engine.Name()})
+			_ = s.store.ClearState()
+			return core.RunInfo{}, fmt.Errorf("kill switch: %w", err)
+		}
+	}
 	return info, nil
 }
 
@@ -115,6 +126,11 @@ func (s *ConnectionService) Down(ctx context.Context) error {
 	}
 	if err := engine.Stop(ctx, core.RunInfo{PID: st.PID, ConfigPath: st.ConfigPath, Core: st.Core}); err != nil {
 		return err
+	}
+	if s.cfg.Features.KillSwitch {
+		// Best effort: state is already cleared, and a leftover anchor
+		// can be flushed by the next Down or manually.
+		_ = platform.DisableKillSwitch()
 	}
 	return s.store.ClearState()
 }
