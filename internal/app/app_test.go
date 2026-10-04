@@ -89,7 +89,7 @@ func TestProfileAddUse(t *testing.T) {
 
 func TestConnectionGuards(t *testing.T) {
 	st := testStore(t)
-	cfg, _ := config.Load("", nil)
+	cfg := config.Defaults()
 	paths := platform.Paths{DataDir: t.TempDir(), RuntimeDir: t.TempDir(), StateFile: filepath.Join(t.TempDir(), "state.json")}
 	reg := core.NewRegistry()
 	svc := NewConnectionService(st, reg, cfg, paths)
@@ -231,7 +231,7 @@ func TestDownForeignProcessNeedsSudo(t *testing.T) {
 		t.Skip("requires unprivileged user")
 	}
 	st := testStore(t)
-	cfg, _ := config.Load("", nil)
+	cfg := config.Defaults()
 	paths := platform.Paths{DataDir: t.TempDir(), RuntimeDir: t.TempDir(), StateFile: filepath.Join(t.TempDir(), "state.json")}
 	reg := core.NewRegistry()
 	svc := NewConnectionService(st, reg, cfg, paths)
@@ -246,7 +246,7 @@ func TestDownForeignProcessNeedsSudo(t *testing.T) {
 
 func TestStatusShowsActiveWhileStopped(t *testing.T) {
 	st := testStore(t)
-	cfg, _ := config.Load("", nil)
+	cfg := config.Defaults()
 	paths := platform.Paths{DataDir: t.TempDir(), RuntimeDir: t.TempDir(), StateFile: filepath.Join(t.TempDir(), "state.json")}
 	svc := NewConnectionService(st, core.NewRegistry(), cfg, paths)
 	psvc := NewProfileService(st)
@@ -269,10 +269,7 @@ func TestStatusShowsActiveWhileStopped(t *testing.T) {
 func TestSettingsServiceUpdate(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/config.yaml"
-	def, err := config.Load("", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	def := config.Defaults()
 	if err := config.Save(path, def); err != nil {
 		t.Fatal(err)
 	}
