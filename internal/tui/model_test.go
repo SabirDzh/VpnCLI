@@ -316,3 +316,21 @@ func TestMenuErrorSummary(t *testing.T) {
 		t.Fatalf("got:\n%s", out)
 	}
 }
+
+func TestNumberKeysOpenPages(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 24)
+	titles := []string{"Status", "Profiles", "Subscriptions"}
+	for i, key := range []string{"1", "2", "3"} {
+		nm, cmd := m.Update(keyPress(key))
+		m = nm.(*Model)
+		if m.page == nil || m.page.Title() != titles[i] {
+			t.Fatalf("key %s must open %s", key, titles[i])
+		}
+		if cmd == nil {
+			t.Fatal("opening must fetch")
+		}
+		nm, _ = m.Update(shared.BackMsg{})
+		m = nm.(*Model)
+	}
+}

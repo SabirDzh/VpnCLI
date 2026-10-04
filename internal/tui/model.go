@@ -151,6 +151,13 @@ func (m *Model) menuKey(k string) tea.Cmd {
 	case "enter", "space":
 		m.page = m.pages[m.cursor]
 		return m.page.Init()
+	case "1", "2", "3":
+		n := int(k[0] - '1')
+		if n >= 0 && n < len(m.pages) {
+			m.cursor = n
+			m.page = m.pages[n]
+			return m.page.Init()
+		}
 	}
 	return nil
 }
@@ -206,13 +213,12 @@ func (m *Model) menu() string {
 	}
 	var b strings.Builder
 	for i, r := range rows {
-		plain := fmt.Sprintf("  %-14s %s", r.title, shared.Truncate(r.summary, w-18))
-		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
+		inner := fmt.Sprintf("%d. %-11s %s", i+1, r.title, shared.Truncate(r.summary, w-21))
+		inner += strings.Repeat(" ", max(0, w-2-len([]rune(inner))))
 		if i == m.cursor {
-			plain = m.styles.ActiveMark.Render("> ") + plain[2:]
-			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
+			b.WriteString(m.styles.SelectedRow.Render(m.styles.ActiveMark.Render("> ")+inner) + "\n")
 		} else {
-			b.WriteString(m.styles.Dim.Render(plain) + "\n")
+			b.WriteString(m.styles.Dim.Render("  "+inner) + "\n")
 		}
 	}
 	return b.String()
