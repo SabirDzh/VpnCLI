@@ -213,12 +213,17 @@ func (m *Model) menu() string {
 	}
 	var b strings.Builder
 	for i, r := range rows {
-		inner := fmt.Sprintf("%d. %-11s %s", i+1, r.title, shared.Truncate(r.summary, w-21))
-		inner += strings.Repeat(" ", max(0, w-2-len([]rune(inner))))
+		// fixed columns: arrow + gap | "N. Title" | gap | summary
+		head := fmt.Sprintf("%d. %s", i+1, r.title)
+		head += strings.Repeat(" ", max(0, 18-len([]rune(head))))
+		summary := shared.Truncate(r.summary, w-5-18-2)
+		plain := "     " + head + "  " + summary
+		plain += strings.Repeat(" ", max(0, w-len([]rune(plain))))
 		if i == m.cursor {
-			b.WriteString(m.styles.SelectedRow.Render(m.styles.ActiveMark.Render("> ")+inner) + "\n")
+			plain = m.styles.ActiveMark.Render(">") + "    " + plain[5:]
+			b.WriteString(m.styles.SelectedRow.Render(plain) + "\n")
 		} else {
-			b.WriteString(m.styles.Dim.Render("  "+inner) + "\n")
+			b.WriteString(m.styles.Dim.Render(plain) + "\n")
 		}
 	}
 	return b.String()
