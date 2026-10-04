@@ -176,3 +176,160 @@ func TestTUNAutoName(t *testing.T) {
 		t.Fatal("interface_name must be omitted for auto mode")
 	}
 }
+
+func buildRouted(t *testing.T, mutate func(*core.Options)) (rules []any, ruleSet []any, final any) {
+	t.Helper()
+	opts := testOpts()
+	if mutate != nil {
+		mutate(&opts)
+	}
+	var b Builder
+	p := domain.Profile{
+		Protocol: domain.ProtocolTrojan,
+		Endpoint: domain.Endpoint{Host: "192.0.2.5", Port: 443},
+		Settings: domain.ProtocolSettings{Password: "secret"},
+	}
+	got, err := b.Build(p, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(got, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	route := cfg["route"].(map[string]any)
+	if rs, ok := route["rule_set"].([]any); ok {
+		ruleSet = rs
+	}
+	rules, _ = route["rules"].([]any)
+	return rules, ruleSet, route["final"]
+}
+
+func ruleBySet(t *testing.T, rules []any, tag string) map[string]any {
+	t.Helper()
+	for _, r := range rules {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		rs, _ := m["rule_set"].([]any)
+		for _, x := range rs {
+			if x == tag {
+				return m
+			}
+		}
+	}
+	t.Fatalf("rule for rule_set %q not found", tag)
+	return nil
+}
+
+func ruleByOutbound(t *testing.T, rules []any, outbound string) map[string]any {
+	t.Helper()
+	for _, r := range rules {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		if m["outbound"] != outbound || m["action"] != "route" {
+			continue
+		}
+		// split rules carry concrete targets; the base private rule does not
+		if _, ok := m["domain_suffix"]; ok {
+			return m
+		}
+		if _, ok := m["ip_cidr"]; ok {
+			return m
+		}
+	}
+	t.Fatalf("route rule to %q not found", outbound)
+	return nil
+}
+
+func TestBlocklistRules(t *testing.T) {
+	rules, ruleSet, _ := buildRouted(t, func(o *core.Options) {
+		o.Adblock = true
+		o.TrackerBlock = true
+	})
+	if len(ruleSet) != 2 {
+		t.Fatalf("want 2 rule_set definitions, got %d", len(ruleSet))
+	}
+	ads := ruleBySet(t, rules, "geosite-ads")
+	if ads["action"] != "reject" {
+		t.Fatalf("ads rule must reject: %v", ads)
+	}
+	trk := ruleBySet(t, rules, "geosite-trackers")
+	if trk["action"] != "reject" {
+		t.Fatalf("trackers rule must reject: %v", trk)
+	}
+	// ads must come before trackers (first match wins; both reject — order stability)
+	adsIdx, trkIdx := -1, -1
+	for i, r := range rules {
+		m := r.(map[string]any)
+		if rs, ok := m["rule_set"].([]any); ok && len(rs) > 0 && rs[0] == "geosite-ads" {
+			adsIdx = i
+		}
+		if rs, ok := m["rule_set"].([]any); ok && len(rs) > 0 && rs[0] == "geosite-trackers" {
+			trkIdx = i
+		}
+	}
+	if adsIdx > trkIdx {
+		t.Fatalf("ads rule must precede trackers: %d > %d", adsIdx, trkIdx)
+	}
+}
+
+func TestNoBlocklistsByDefault(t *testing.T) {
+	rules, ruleSet, _ := buildRouted(t, nil)
+	if len(ruleSet) != 0 {
+		t.Fatalf("no rule_set expected, got %d", len(ruleSet))
+	}
+	for _, r := range rules {
+		m := r.(map[string]any)
+		if _, ok := m["rule_set"]; ok {
+			t.Fatalf("no rule_set rules expected: %v", m)
+		}
+	}
+}
+
+func TestSplitExcludeRule(t *testing.T) {
+	rules, _, final := buildRouted(t, func(o *core.Options) {
+		o.SplitExclude = []string{"bank.example", "192.168.0.0/16"}
+	})
+	direct := ruleByOutbound(t, rules, "direct")
+	if final != "proxy" {
+		t.Fatalf("exclude-only must keep final proxy, got %v", final)
+	}
+	if ds, _ := direct["domain_suffix"].([]any); len(ds) != 1 || ds[0] != "bank.example" {
+		t.Fatalf("domain_suffix: %v", ds)
+	}
+	if cidr, _ := direct["ip_cidr"].([]any); len(cidr) != 1 || cidr[0] != "192.168.0.0/16" {
+		t.Fatalf("ip_cidr: %v", cidr)
+	}
+}
+
+func TestSplitIncludeFlipsFinal(t *testing.T) {
+	rules, _, final := buildRouted(t, func(o *core.Options) {
+		o.SplitExclude = []string{"bank.example"}
+		o.SplitInclude = []string{"10.0.0.0/8", "corp.example"}
+	})
+	if final != "direct" {
+		t.Fatalf("include list must flip final to direct, got %v", final)
+	}
+	inc := ruleByOutbound(t, rules, "proxy")
+	if cidr, _ := inc["ip_cidr"].([]any); len(cidr) != 1 || cidr[0] != "10.0.0.0/8" {
+		t.Fatalf("include ip_cidr: %v", cidr)
+	}
+	// exclude must precede include so bypasses win
+	exIdx, incIdx := -1, -1
+	for i, r := range rules {
+		m := r.(map[string]any)
+		if m["outbound"] == "direct" && m["action"] == "route" {
+			exIdx = i
+		}
+		if m["outbound"] == "proxy" && m["action"] == "route" {
+			incIdx = i
+		}
+	}
+	if exIdx == -1 || incIdx == -1 || exIdx > incIdx {
+		t.Fatalf("exclude must precede include: %d, %d", exIdx, incIdx)
+	}
+}

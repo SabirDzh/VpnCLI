@@ -20,6 +20,11 @@ type Options struct {
 	MixedEnabled bool
 	MixedPort    int
 	LogLevel     string
+	// Features applied by the config builder (see singbox.Builder).
+	Adblock      bool
+	TrackerBlock bool
+	SplitExclude []string
+	SplitInclude []string
 }
 
 // StartRequest — всё, что нужно ядру для запуска.

@@ -35,6 +35,10 @@ func (s *ConnectionService) options() core.Options {
 		MixedEnabled: true,
 		MixedPort:    s.cfg.MixedPort,
 		LogLevel:     s.cfg.Log.Level,
+		Adblock:      s.cfg.Features.Adblock,
+		TrackerBlock: s.cfg.Features.TrackerBlock,
+		SplitExclude: s.cfg.Features.SplitExclude,
+		SplitInclude: s.cfg.Features.SplitInclude,
 	}
 }
 

@@ -6,6 +6,7 @@ package singbox
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/SabirDzh/VpnCLI/internal/core"
 	"github.com/SabirDzh/VpnCLI/internal/domain"
@@ -14,6 +15,32 @@ import (
 // Builder translates a neutral Profile into a sing-box 1.14 JSON config.
 // TUN is the primary mode; mixed proxy is an optional second inbound.
 type Builder struct{}
+
+// Rule-set sources (verified remote .srs; sing-box downloads and caches them).
+const (
+	adsRuleSetURL      = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs"
+	trackersRuleSetURL = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-public-tracker.srs"
+)
+
+// splitRule splits tokens into domain_suffix (hosts) and ip_cidr (prefixes).
+func splitRule(tokens []string, outbound string) map[string]any {
+	var domains, cidrs []any
+	for _, tok := range tokens {
+		if strings.Contains(tok, "/") {
+			cidrs = append(cidrs, tok)
+		} else {
+			domains = append(domains, tok)
+		}
+	}
+	rule := map[string]any{"action": "route", "outbound": outbound}
+	if len(domains) > 0 {
+		rule["domain_suffix"] = domains
+	}
+	if len(cidrs) > 0 {
+		rule["ip_cidr"] = cidrs
+	}
+	return rule
+}
 
 // Build implements core.ConfigBuilder.
 func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
@@ -25,6 +52,45 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		return nil, err
 	}
 
+	baseRules := []any{
+		map[string]any{"protocol": "dns", "action": "hijack-dns"},
+		map[string]any{"ip_cidr": []string{"224.0.0.0/3", "ff00::/8"}, "action": "reject"},
+		map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
+	}
+	rules := baseRules
+	var ruleSet []any
+	if opts.Adblock {
+		ruleSet = append(ruleSet, map[string]any{
+			"tag": "geosite-ads", "type": "remote", "url": adsRuleSetURL, "download_detour": "direct",
+		})
+		rules = append(rules, map[string]any{"rule_set": []any{"geosite-ads"}, "action": "reject"})
+	}
+	if opts.TrackerBlock {
+		ruleSet = append(ruleSet, map[string]any{
+			"tag": "geosite-trackers", "type": "remote", "url": trackersRuleSetURL, "download_detour": "direct",
+		})
+		rules = append(rules, map[string]any{"rule_set": []any{"geosite-trackers"}, "action": "reject"})
+	}
+	if len(opts.SplitExclude) > 0 {
+		rules = append(rules, splitRule(opts.SplitExclude, "direct"))
+	}
+	if len(opts.SplitInclude) > 0 {
+		rules = append(rules, splitRule(opts.SplitInclude, "proxy"))
+	}
+	final := "proxy"
+	if len(opts.SplitInclude) > 0 {
+		final = "direct"
+	}
+
+	route := map[string]any{
+		"rules":                   rules,
+		"auto_detect_interface":   true,
+		"final":                   final,
+		"default_domain_resolver": map[string]any{"server": "local"},
+	}
+	if len(ruleSet) > 0 {
+		route["rule_set"] = ruleSet
+	}
 	cfg := map[string]any{
 		"log": map[string]any{"level": logLevel(opts.LogLevel)},
 		"dns": map[string]any{
@@ -36,16 +102,7 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		},
 		"inbounds":  inbounds(opts),
 		"outbounds": []any{proxy, map[string]any{"type": "direct", "tag": "direct"}, map[string]any{"type": "block", "tag": "block"}},
-		"route": map[string]any{
-			"rules": []any{
-				map[string]any{"protocol": "dns", "action": "hijack-dns"},
-				map[string]any{"ip_cidr": []string{"224.0.0.0/3", "ff00::/8"}, "action": "reject"},
-				map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
-			},
-			"auto_detect_interface":   true,
-			"final":                   "proxy",
-			"default_domain_resolver": map[string]any{"server": "local"},
-		},
+		"route":     route,
 	}
 
 	out, err := json.MarshalIndent(cfg, "", "  ")
