@@ -36,10 +36,10 @@ type Model struct {
 	styles theme.Styles
 	toast  component.Toast
 	// openURL is overridable for tests.
-	openURL  func(string) error
-	latest   string
-	auto     bool
-	width    int
+	openURL func(string) error
+	latest  string
+	auto    bool
+	width   int
 	// stats snapshot + log view state.
 	totals   app.Traffic
 	statsErr string
