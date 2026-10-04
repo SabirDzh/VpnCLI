@@ -135,6 +135,8 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		return m, shared.FetchStatus(m.ctx, m.api)
 	case "enter", "c":
 		return m.toggle()
+	case "esc":
+		return m, shared.Back()
 	}
 	return m, nil
 }

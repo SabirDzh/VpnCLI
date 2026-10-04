@@ -48,3 +48,6 @@ type ConfirmResultMsg struct {
 	Tag string
 	OK  bool
 }
+
+// BackMsg asks the root model to return to the main menu.
+type BackMsg struct{}

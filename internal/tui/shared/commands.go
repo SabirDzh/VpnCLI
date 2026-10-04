@@ -42,6 +42,11 @@ func ScheduleTick(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return TickMsg{} })
 }
 
+// Back returns to the main menu.
+func Back() tea.Cmd {
+	return func() tea.Msg { return BackMsg{} }
+}
+
 // DoUp connects the given profile.
 func DoUp(ctx context.Context, api ConnectionAPI, ref, label string) tea.Cmd {
 	return withTimeout(ctx, func(ctx context.Context) tea.Msg {

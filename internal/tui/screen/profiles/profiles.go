@@ -213,6 +213,8 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		m.pending = p
 		m.confirm.Ask(fmt.Sprintf("Подключить %s?", it.name), "connect")
 		return m, nil
+	case "esc":
+		return m, shared.Back()
 	}
 	return m, nil
 }

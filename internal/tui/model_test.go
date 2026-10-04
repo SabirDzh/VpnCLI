@@ -41,24 +41,70 @@ func sized(m *Model, w, h int) *Model {
 	return nm.(*Model)
 }
 
-func TestTabSwitch(t *testing.T) {
+func TestMenuNavigation(t *testing.T) {
 	deps, _, _, _ := testDeps()
 	m := sized(NewModel(context.Background(), deps), 80, 24)
-	if m.active != 0 {
-		t.Fatal("must start on status")
+	if m.page != nil || m.cursor != 0 {
+		t.Fatal("must start on the main menu")
 	}
-	steps := []struct {
-		key  string
-		want int
-	}{
-		{"2", 1}, {"tab", 2}, {"shift+tab", 1}, {"1", 0}, {"3", 2}, {"tab", 0},
+	nm, _ := m.Update(keyPress("j"))
+	m = nm.(*Model)
+	if m.cursor != 1 {
+		t.Fatal("j must move down")
 	}
-	for _, s := range steps {
-		nm, _ := m.Update(keyPress(s.key))
-		m = nm.(*Model)
-		if m.active != s.want {
-			t.Fatalf("key %s: active=%d want %d", s.key, m.active, s.want)
-		}
+	nm, _ = m.Update(keyPress("k"))
+	m = nm.(*Model)
+	if m.cursor != 0 {
+		t.Fatal("k must move up")
+	}
+	// old tab keys do nothing now
+	nm, _ = m.Update(keyPress("2"))
+	m = nm.(*Model)
+	if m.page != nil {
+		t.Fatal("tabs are gone")
+	}
+	// enter opens the page, esc returns
+	nm, _ = m.Update(keyPress("down"))
+	m = nm.(*Model)
+	nm, cmd := m.Update(keyPress("enter"))
+	m = nm.(*Model)
+	if m.page == nil {
+		t.Fatal("enter must open a page")
+	}
+	if cmd == nil {
+		t.Fatal("opening a page must fetch")
+	}
+	if m.page.Title() != "Profiles" {
+		t.Fatalf("want Profiles, got %s", m.page.Title())
+	}
+	nm, _ = m.Update(shared.BackMsg{})
+	m = nm.(*Model)
+	if m.page != nil {
+		t.Fatal("BackMsg must return to menu")
+	}
+}
+
+func TestPageEscGoesBack(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 24)
+	nm, _ := m.Update(keyPress("enter")) // open Status
+	m = nm.(*Model)
+	if m.page == nil {
+		t.Fatal("must open status page")
+	}
+	nm, cmd := m.Update(keyPress("esc")) // status emits Back
+	m = nm.(*Model)
+	_ = cmd
+	if cmd == nil {
+		t.Fatal("esc must produce a command")
+	}
+	msg := cmd()
+	if _, ok := msg.(shared.BackMsg); !ok {
+		t.Fatalf("esc must request back, got %T", msg)
+	}
+	nm, _ = m.Update(msg)
+	if nm.(*Model).page != nil {
+		t.Fatal("must be back on menu")
 	}
 }
 
@@ -188,6 +234,10 @@ func keyPress(s string) tea.Msg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "space":
 		return tea.KeyPressMsg{Code: tea.KeySpace}
+	case "up":
+		return tea.KeyPressMsg{Code: tea.KeyUp}
+	case "down":
+		return tea.KeyPressMsg{Code: tea.KeyDown}
 	default:
 		return tea.KeyPressMsg{Code: rune(s[0])}
 	}
@@ -228,5 +278,41 @@ func TestHeaderFooter(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestMenuSummaries(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 24)
+	// feed summaries
+	nm, _ := m.Update(shared.StatusMsg{St: app.StatusView{Running: true, ProfileName: "home"}})
+	m = nm.(*Model)
+	nm, _ = m.Update(shared.ProfilesMsg{
+		List:     []domain.Profile{{ID: "a1", Name: "home"}},
+		ActiveID: "a1",
+	})
+	m = nm.(*Model)
+	nm, _ = m.Update(shared.SubsMsg{Subs: []domain.Subscription{{ID: "s1"}}})
+	m = nm.(*Model)
+	out := strip(m.render())
+	for _, want := range []string{"home", "1 profiles", "1 subs"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+	// space opens too
+	nm, _ = m.Update(keyPress("space"))
+	if nm.(*Model).page == nil {
+		t.Fatal("space must open a page")
+	}
+}
+
+func TestMenuErrorSummary(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 24)
+	nm, _ := m.Update(shared.StatusMsg{Err: domain.ErrNotRunning})
+	out := strip(nm.(*Model).render())
+	if !strings.Contains(out, "error") {
+		t.Fatalf("got:\n%s", out)
 	}
 }

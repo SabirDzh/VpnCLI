@@ -127,6 +127,8 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, nil
 		}
 		return m, shared.FetchSubs(m.profiles, m.subs)
+	case "esc":
+		return m, shared.Back()
 	case "u", "U":
 		if m.busy || !m.loaded || len(m.list) == 0 {
 			return m, nil
