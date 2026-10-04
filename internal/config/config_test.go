@@ -193,6 +193,81 @@ func TestKillSwitchNeedsTUN(t *testing.T) {
 	}
 }
 
+func TestExpansionDefaults(t *testing.T) {
+	c := Defaults()
+	if len(c.DNS.Servers) != 2 || c.DNS.Servers[0] != "1.1.1.1" {
+		t.Fatalf("dns servers: %+v", c.DNS.Servers)
+	}
+	if c.DNS.Strategy != "prefer_ipv4" || c.Features.SplitMode != "exclude" ||
+		!c.Features.PresetApps || c.Features.Multiplex != "auto" {
+		t.Fatalf("defaults: dns=%+v mode=%q preset=%v mux=%q",
+			c.DNS, c.Features.SplitMode, c.Features.PresetApps, c.Features.Multiplex)
+	}
+}
+
+func TestExpansionRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/config.yaml"
+	src := `
+dns:
+  servers: ["9.9.9.9", "https://dns.quad9.net/dns-query"]
+  strategy: ipv6_only
+features:
+  split_mode: include
+  split_exclude_apps:
+    - Госуслуги
+  split_include_apps:
+    - Miro
+  preset_apps: false
+  multiplex: off
+`
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.DNS.Servers[0] != "9.9.9.9" || c.DNS.Strategy != "ipv6_only" ||
+		c.Features.SplitMode != "include" || c.Features.PresetApps ||
+		len(c.Features.SplitExcludeApps) != 1 || c.Features.Multiplex != "off" {
+		t.Fatalf("load: dns=%+v features=%+v", c.DNS, c.Features)
+	}
+	if err := Save(path, c); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	for _, want := range []string{"split_mode: include", "split_exclude_apps:", "Госуслуги", "preset_apps: false", `multiplex: "off"`, "https://dns.quad9.net/dns-query"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("saved missing %q:\n%s", want, raw)
+		}
+	}
+}
+
+func TestExpansionValidation(t *testing.T) {
+	mk := func(mut func(*Config)) Config {
+		c := Defaults()
+		mut(&c)
+		return c
+	}
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"bad mode", mk(func(c *Config) { c.Features.SplitMode = "both" })},
+		{"bad mux", mk(func(c *Config) { c.Features.Multiplex = "maybe" })},
+		{"bad strategy", mk(func(c *Config) { c.DNS.Strategy = "auto" })},
+		{"too many dns", mk(func(c *Config) { c.DNS.Servers = []string{"1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4"} })},
+		{"bad dns", mk(func(c *Config) { c.DNS.Servers = []string{"a b"} })},
+		{"bad split app", mk(func(c *Config) { c.Features.SplitExcludeApps = []string{"bad name"} })},
+	}
+	for _, tc := range cases {
+		if err := tc.cfg.Validate(); !errors.Is(err, domain.ErrInvalidConfig) {
+			t.Fatalf("%s: expected invalid, got %v", tc.name, err)
+		}
+	}
+}
+
 func TestAppFirewallValidation(t *testing.T) {
 	dir := t.TempDir()
 	bad := dir + "/bad.yaml"

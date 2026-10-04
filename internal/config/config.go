@@ -35,6 +35,11 @@ type Config struct {
 		StrictRoute bool   `mapstructure:"strict_route"`
 	} `mapstructure:"tun"`
 	MixedPort int `mapstructure:"mixed_port"`
+	// DNS — серверы и стратегия для builder'а (guard через туннель).
+	DNS struct {
+		Servers  []string `mapstructure:"servers" yaml:"servers"`
+		Strategy string   `mapstructure:"strategy" yaml:"strategy"`
+	} `mapstructure:"dns" yaml:"dns"`
 	// Features — TUI-managed routing extras: DNS-level blocklists and
 	// split tunneling lists (domains or CIDRs), applied on next connect.
 	Features struct {
@@ -42,9 +47,17 @@ type Config struct {
 		TrackerBlock bool     `mapstructure:"trackerblock" yaml:"trackerblock"`
 		SocialBlock  bool     `mapstructure:"socialblock" yaml:"socialblock"`
 		KillSwitch   bool     `mapstructure:"kill_switch" yaml:"kill_switch"`
+		SplitMode    string   `mapstructure:"split_mode" yaml:"split_mode"`
 		SplitExclude []string `mapstructure:"split_exclude" yaml:"split_exclude"`
 		SplitInclude []string `mapstructure:"split_include" yaml:"split_include"`
-		AppFirewall  []string `mapstructure:"appfirewall" yaml:"appfirewall"`
+		// Списки приложений для режимов «кроме»/«только» (имена процессов).
+		SplitExcludeApps []string `mapstructure:"split_exclude_apps" yaml:"split_exclude_apps"`
+		SplitIncludeApps []string `mapstructure:"split_include_apps" yaml:"split_include_apps"`
+		// PresetApps включает встроенный список РФ-приложений в «кроме».
+		PresetApps  bool     `mapstructure:"preset_apps" yaml:"preset_apps"`
+		AppFirewall []string `mapstructure:"appfirewall" yaml:"appfirewall"`
+		// Multiplex: off|on|auto (auto = fallback-рестарт без mux).
+		Multiplex string `mapstructure:"multiplex" yaml:"multiplex"`
 	} `mapstructure:"features" yaml:"features"`
 	// Update controls self-update behavior; auto applies on next launch.
 	Update struct {
@@ -64,6 +77,11 @@ func Defaults() Config {
 	c.TUN.AutoRoute = true
 	c.TUN.StrictRoute = true
 	c.MixedPort = 10808
+	c.DNS.Servers = []string{"1.1.1.1", "8.8.8.8"}
+	c.DNS.Strategy = "prefer_ipv4"
+	c.Features.SplitMode = "exclude"
+	c.Features.PresetApps = true
+	c.Features.Multiplex = "auto"
 	return c
 }
 
@@ -83,6 +101,11 @@ func Load(cfgFile string, overrides map[string]any) (Config, error) {
 	v.SetDefault("tun.auto_route", def.TUN.AutoRoute)
 	v.SetDefault("tun.strict_route", def.TUN.StrictRoute)
 	v.SetDefault("mixed_port", def.MixedPort)
+	v.SetDefault("dns.servers", def.DNS.Servers)
+	v.SetDefault("dns.strategy", def.DNS.Strategy)
+	v.SetDefault("features.split_mode", def.Features.SplitMode)
+	v.SetDefault("features.preset_apps", def.Features.PresetApps)
+	v.SetDefault("features.multiplex", def.Features.Multiplex)
 
 	v.SetConfigName("config")
 	v.SetConfigType("yaml")
@@ -132,6 +155,36 @@ func (c Config) Validate() error {
 	// would sever sing-box's own uplink too.
 	if c.Features.KillSwitch && !c.TUN.Enabled {
 		return fmt.Errorf("%w: kill_switch requires tun.enabled", domain.ErrInvalidConfig)
+	}
+	switch c.Features.SplitMode {
+	case "exclude", "include", "off":
+	default:
+		return fmt.Errorf("%w: unknown features.split_mode %q", domain.ErrInvalidConfig, c.Features.SplitMode)
+	}
+	switch c.Features.Multiplex {
+	case "off", "on", "auto":
+	default:
+		return fmt.Errorf("%w: unknown features.multiplex %q", domain.ErrInvalidConfig, c.Features.Multiplex)
+	}
+	switch c.DNS.Strategy {
+	case "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only":
+	default:
+		return fmt.Errorf("%w: unknown dns.strategy %q", domain.ErrInvalidConfig, c.DNS.Strategy)
+	}
+	if len(c.DNS.Servers) == 0 || len(c.DNS.Servers) > 3 {
+		return fmt.Errorf("%w: dns.servers must hold 1..3 entries", domain.ErrInvalidConfig)
+	}
+	for _, s := range c.DNS.Servers {
+		if s == "" || strings.ContainsAny(s, " \t") {
+			return fmt.Errorf("%w: bad dns server %q", domain.ErrInvalidConfig, s)
+		}
+	}
+	for _, list := range [][]string{c.Features.SplitExcludeApps, c.Features.SplitIncludeApps} {
+		for _, app := range list {
+			if app == "" || strings.ContainsAny(app, " \t/") {
+				return fmt.Errorf("%w: bad split app name %q", domain.ErrInvalidConfig, app)
+			}
+		}
 	}
 	for _, list := range [][]string{c.Features.SplitExclude, c.Features.SplitInclude} {
 		for _, tok := range list {
@@ -195,11 +248,18 @@ func Save(path string, c Config) error {
 	set("tun.auto_route", c.TUN.AutoRoute)
 	set("tun.strict_route", c.TUN.StrictRoute)
 	set("mixed_port", c.MixedPort)
+	set("dns.servers", c.DNS.Servers)
+	set("dns.strategy", c.DNS.Strategy)
 	set("features.adblock", c.Features.Adblock)
 	set("features.trackerblock", c.Features.TrackerBlock)
 	set("features.socialblock", c.Features.SocialBlock)
 	set("features.kill_switch", c.Features.KillSwitch)
+	set("features.split_mode", c.Features.SplitMode)
+	set("features.split_exclude_apps", c.Features.SplitExcludeApps)
+	set("features.split_include_apps", c.Features.SplitIncludeApps)
+	set("features.preset_apps", c.Features.PresetApps)
 	set("features.appfirewall", c.Features.AppFirewall)
+	set("features.multiplex", c.Features.Multiplex)
 	set("features.split_exclude", c.Features.SplitExclude)
 	set("features.split_include", c.Features.SplitInclude)
 	set("update.auto", c.Update.Auto)
