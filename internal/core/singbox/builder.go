@@ -61,6 +61,9 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 	}
 
 	baseRules := []any{
+		// DNS guard first: catch plaintext queries to ANY resolver
+		// routed into the tunnel, not just protocol-detected DNS.
+		map[string]any{"port": 53, "action": "hijack-dns"},
 		map[string]any{"protocol": "dns", "action": "hijack-dns"},
 		map[string]any{"ip_cidr": []string{"224.0.0.0/3", "ff00::/8"}, "action": "reject"},
 		map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
@@ -117,15 +120,17 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 	cfg := map[string]any{
 		"log": map[string]any{"level": logLevel(opts.LogLevel)},
 		"dns": map[string]any{
-			"servers": []any{
-				map[string]any{"type": "https", "tag": "remote", "server": "1.1.1.1", "detour": "proxy"},
-				map[string]any{"type": "local", "tag": "local"},
-			},
-			"final": "remote",
+			"servers":  dnsServers(opts),
+			"strategy": dnsStrategy(opts),
+			"final":    "remote",
 		},
 		"inbounds":  inbounds(opts),
 		"outbounds": []any{proxy, map[string]any{"type": "direct", "tag": "direct"}, map[string]any{"type": "block", "tag": "block"}},
 		"route":     route,
+		"experimental": map[string]any{
+			"clash_api":  map[string]any{"external_controller": "127.0.0.1:9090", "default_mode": "rule"},
+			"cache_file": map[string]any{"enabled": true},
+		},
 	}
 
 	out, err := json.MarshalIndent(cfg, "", "  ")
@@ -133,6 +138,36 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// dnsServers renders configured servers; every entry resolves through the
+// proxy (doh) so even plain-IP resolvers stay protected inside the tunnel.
+// The local server stays last: default_domain_resolver points to it.
+func dnsServers(opts core.Options) []any {
+	servers := opts.DNSServers
+	if len(servers) == 0 {
+		servers = []string{"1.1.1.1", "8.8.8.8"}
+	}
+	out := make([]any, 0, len(servers)+1)
+	for i, s := range servers {
+		tag := "remote"
+		if i > 0 {
+			tag = fmt.Sprintf("remote-%d", i)
+		}
+		out = append(out, map[string]any{
+			"type": "https", "tag": tag, "server": s, "detour": "proxy",
+		})
+	}
+	out = append(out, map[string]any{"type": "local", "tag": "local"})
+	return out
+}
+
+func dnsStrategy(opts core.Options) string {
+	switch opts.DNSStrategy {
+	case "prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only":
+		return opts.DNSStrategy
+	}
+	return "prefer_ipv4"
 }
 
 func logLevel(l string) string {

@@ -19,6 +19,89 @@ func testOpts() core.Options {
 	}
 }
 
+func testTrojan() domain.Profile {
+	return domain.Profile{
+		Protocol: domain.ProtocolTrojan,
+		Endpoint: domain.Endpoint{Host: "192.0.2.5", Port: 443},
+		Settings: domain.ProtocolSettings{Password: "x"},
+	}
+}
+
+func TestDNSSectionAndGuard(t *testing.T) {
+	var b Builder
+	opts := testOpts()
+	opts.DNSServers = []string{"9.9.9.9", "https://dns.quad9.net/dns-query"}
+	opts.DNSStrategy = "ipv6_only"
+	got, err := b.Build(testTrojan(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(got, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	dns := cfg["dns"].(map[string]any)
+	if dns["strategy"] != "ipv6_only" {
+		t.Fatalf("strategy: %v", dns["strategy"])
+	}
+	servers := dns["servers"].([]any)
+	first := servers[0].(map[string]any)
+	if first["server"] != "9.9.9.9" || first["type"] != "https" || first["detour"] != "proxy" {
+		t.Fatalf("first server: %v", first)
+	}
+	second := servers[1].(map[string]any)
+	if second["server"] != "https://dns.quad9.net/dns-query" {
+		t.Fatalf("doh url server: %v", second)
+	}
+	// guard: port-53 hijack is the first route rule
+	rules := cfg["route"].(map[string]any)["rules"].([]any)
+	r0 := rules[0].(map[string]any)
+	if r0["port"] != float64(53) || r0["action"] != "hijack-dns" {
+		t.Fatalf("guard rule must be first: %v", r0)
+	}
+}
+
+func TestExperimentalClashAPI(t *testing.T) {
+	var b Builder
+	got, err := b.Build(testTrojan(), testOpts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(got, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	exp := cfg["experimental"].(map[string]any)
+	api := exp["clash_api"].(map[string]any)
+	if api["external_controller"] != "127.0.0.1:9090" {
+		t.Fatalf("clash api: %v", api)
+	}
+	if exp["cache_file"].(map[string]any)["enabled"] != true {
+		t.Fatal("cache_file must be enabled")
+	}
+}
+
+func TestDNSFallbackDefaults(t *testing.T) {
+	var b Builder
+	got, err := b.Build(testTrojan(), testOpts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(got, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	dns := cfg["dns"].(map[string]any)
+	servers := dns["servers"].([]any)
+	// 2 fallback remote servers + the trailing local resolver
+	if len(servers) != 3 {
+		t.Fatalf("fallback dns servers: %v", servers)
+	}
+	if dns["strategy"] != "prefer_ipv4" {
+		t.Fatalf("fallback strategy: %v", dns["strategy"])
+	}
+}
+
 func TestGolden(t *testing.T) {
 	cases := map[string]domain.Profile{
 		"vless-reality": {

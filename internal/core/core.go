@@ -27,6 +27,9 @@ type Options struct {
 	AppFirewall  []string
 	SplitExclude []string
 	SplitInclude []string
+	// DNS servers and strategy (guard: resolved via proxy).
+	DNSServers  []string
+	DNSStrategy string
 }
 
 // StartRequest — всё, что нужно ядру для запуска.
