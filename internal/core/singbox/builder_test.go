@@ -102,6 +102,79 @@ func TestDNSFallbackDefaults(t *testing.T) {
 	}
 }
 
+func TestMultiplexBlock(t *testing.T) {
+	var b Builder
+	p := domain.Profile{
+		Protocol: domain.ProtocolVLESS,
+		Endpoint: domain.Endpoint{Host: "192.0.2.5", Port: 443},
+		Settings: domain.ProtocolSettings{UUID: "u", Security: "tls", SNI: "s.example"},
+	}
+	opts := testOpts()
+	opts.Multiplex = "on"
+	got, err := b.Build(p, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	json.Unmarshal(got, &cfg)
+	proxy := cfg["outbounds"].([]any)[0].(map[string]any)
+	mux, ok := proxy["multiplex"].(map[string]any)
+	if !ok || mux["enabled"] != true || mux["protocol"] != "h2mux" {
+		t.Fatalf("mux: %v", proxy["multiplex"])
+	}
+	// off (and empty) → no mux block
+	for _, mode := range []string{"off", ""} {
+		opts.Multiplex = mode
+		got, err = b.Build(p, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		json.Unmarshal(got, &cfg)
+		if cfg["outbounds"].([]any)[0].(map[string]any)["multiplex"] != nil {
+			t.Fatalf("mode %q must not emit multiplex", mode)
+		}
+	}
+}
+
+func TestTUICAnyTLSSSHOutbounds(t *testing.T) {
+	cases := []struct {
+		proto domain.Protocol
+		set   domain.ProtocolSettings
+		check func(map[string]any) bool
+	}{
+		{domain.ProtocolTUIC, domain.ProtocolSettings{UUID: "u", Password: "p", Congestion: "bbr", SNI: "s.example"},
+			func(o map[string]any) bool {
+				return o["type"] == "tuic" && o["congestion_control"] == "bbr" &&
+					o["uuid"] == "u" && o["password"] == "p" &&
+					o["tls"].(map[string]any)["server_name"] == "s.example"
+			}},
+		{domain.ProtocolAnyTLS, domain.ProtocolSettings{Password: "p", SNI: "s.example", Insecure: true},
+			func(o map[string]any) bool {
+				return o["type"] == "anytls" && o["password"] == "p" &&
+					o["tls"].(map[string]any)["insecure"] == true
+			}},
+		{domain.ProtocolSSH, domain.ProtocolSettings{User: "root", Password: "p"},
+			func(o map[string]any) bool {
+				return o["type"] == "ssh" && o["user"] == "root" && o["password"] == "p"
+			}},
+	}
+	var b Builder
+	for _, tc := range cases {
+		p := domain.Profile{Protocol: tc.proto, Endpoint: domain.Endpoint{Host: "h.example", Port: 443}, Settings: tc.set}
+		got, err := b.Build(p, testOpts())
+		if err != nil {
+			t.Fatalf("%s: %v", tc.proto, err)
+		}
+		var cfg map[string]any
+		if err := json.Unmarshal(got, &cfg); err != nil {
+			t.Fatal(err)
+		}
+		if !tc.check(cfg["outbounds"].([]any)[0].(map[string]any)) {
+			t.Fatalf("%s outbound mismatch:\n%s", tc.proto, got)
+		}
+	}
+}
+
 func TestGolden(t *testing.T) {
 	cases := map[string]domain.Profile{
 		"vless-reality": {

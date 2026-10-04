@@ -64,7 +64,7 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 	if len(p.Raw) > 0 {
 		return p.Raw, nil // imported native config passes through
 	}
-	proxy, err := outbound(p)
+	proxy, err := outbound(p, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -250,13 +250,17 @@ func inbounds(opts core.Options) []any {
 	return in
 }
 
-func outbound(p domain.Profile) (map[string]any, error) {
+func outbound(p domain.Profile, opts core.Options) (map[string]any, error) {
 	base := map[string]any{
 		"tag":         "proxy",
 		"server":      p.Endpoint.Host,
 		"server_port": p.Endpoint.Port,
 	}
 	s := p.Settings
+	// mux applies to TCP-transport protocols only (not hysteria2/ssh).
+	if m := muxFor(opts, p.Protocol); m != nil {
+		base["multiplex"] = m
+	}
 	switch p.Protocol {
 	case domain.ProtocolVLESS:
 		if s.UUID == "" {
@@ -328,10 +332,57 @@ func outbound(p domain.Profile) (map[string]any, error) {
 		if s.DownMbps > 0 {
 			base["down_mbps"] = s.DownMbps
 		}
+	case domain.ProtocolTUIC:
+		if s.UUID == "" || s.Password == "" {
+			return nil, fmt.Errorf("tuic: missing uuid/password")
+		}
+		base["type"] = "tuic"
+		base["uuid"] = s.UUID
+		base["password"] = s.Password
+		if s.Congestion != "" {
+			base["congestion_control"] = s.Congestion
+		}
+		base["tls"] = tlsForcing(s)
+	case domain.ProtocolAnyTLS:
+		if s.Password == "" {
+			return nil, fmt.Errorf("anytls: missing password")
+		}
+		base["type"] = "anytls"
+		base["password"] = s.Password
+		base["tls"] = tlsForcing(s)
+	case domain.ProtocolSSH:
+		if s.User == "" {
+			return nil, fmt.Errorf("ssh: missing user")
+		}
+		base["type"] = "ssh"
+		base["user"] = s.User
+		if s.Password != "" {
+			base["password"] = s.Password
+		}
 	default:
 		return nil, fmt.Errorf("%w: %s", domain.ErrUnsupportedProtocol, p.Protocol)
 	}
 	return base, nil
+}
+
+// muxFor emits the sing-box multiplex block for TCP transports when the
+// feature is on (mode "on", or "auto" probing). QUIC-based hysteria2 and
+// ssh do not support it.
+func muxFor(opts core.Options, p domain.Protocol) map[string]any {
+	if opts.Multiplex != "on" && opts.Multiplex != "auto" {
+		return nil
+	}
+	switch p {
+	case domain.ProtocolVLESS, domain.ProtocolVMess, domain.ProtocolTrojan:
+	default:
+		return nil
+	}
+	return map[string]any{
+		"enabled":     true,
+		"protocol":    "h2mux",
+		"max_streams": 8,
+		"padding":     true,
+	}
 }
 
 // tlsFor returns nil when security is none/empty (plain connection).
