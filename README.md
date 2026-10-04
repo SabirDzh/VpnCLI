@@ -100,20 +100,40 @@ tun:
   auto_route: true
   strict_route: true
 mixed_port: 10808
+dns:
+  servers: ["1.1.1.1", "8.8.8.8"]  # до 3; резолвятся через туннель (DoH)
+  strategy: prefer_ipv4            # prefer_ipv4 | prefer_ipv6 | ipv4_only | ipv6_only
 features:
   adblock: false        # блокировка рекламы (DNS-уровень, geosite-ads)
   trackerblock: false   # блокировка трекеров (geosite-public-tracker)
   socialblock: false    # блокировка соцсетей (geosite-social-media)
   kill_switch: false    # pf-kill switch (macOS): без VPN трафик наружу закрыт; требует tun.enabled
-  appfirewall: []       # запрет приложений через VPN: [torrent-client, Steam] (по имени процесса)
-  split_exclude: []     # домены/CIDR напрямую мимо VPN: [bank.example, 192.168.0.0/16]
-  split_include: []     # только это через VPN, остальное напрямую (непустой меняет final на direct)
+  appfirewall: []       # полная блокировка сети приложению: [torrent-client] (по имени процесса)
+  split_mode: exclude   # exclude («кроме») | include («только») | off
+  split_exclude: []     # «кроме»: домены/CIDR мимо VPN: [bank.example, 192.168.0.0/16]
+  split_include: []     # «только»: это через VPN, остальное напрямую
+  split_exclude_apps: [] # «кроме»: приложения мимо VPN (имена процессов)
+  split_include_apps: [] # «только»: только эти приложения через VPN
+  preset_apps: true     # встроенный пресет РФ-приложений (банки, Госуслуги, Яндекс…) в «кроме»
+  multiplex: auto       # off | on | auto (auto: fallback-рестарт без mux при ошибке рукопожатия)
 update:
   auto: false           # автообновление CLI при запуске (cli и tui)
 ```
 
-`features` и `update.auto` можно менять прямо в TUI (Settings и Other):
-изменения сохраняются в конфиг и применяются при следующем подключении.
+`features`, `dns`, `tun` (mtu/stack/auto_route/strict_route), `mixed_port` и
+`update.auto` можно менять прямо в TUI (Settings и Other): изменения
+сохраняются в конфиг и применяются при следующем подключении.
+
+Протоколы: vless (включая REALITY), vmess, trojan, shadowsocks (в т.ч.
+SS2022), hysteria2, tuic, anytls, ssh. Импорт: URI, файл (`vpn profile
+add --file f.txt` — URI или native-конфиг ядра), буфер обмена
+(`--clipboard`), клавиши `i`/`p` в TUI. Экспорт: `vpn profile export
+<id|name|--all> [--clipboard|--out f]`, `vpn sub export`, клавиши
+`y`/`Y` в TUI.
+
+Статистика: при `up` ядро открывает clash_api на 127.0.0.1:9090 (только
+localhost) — Other показывает трафик, соединения и счётчик блокировок;
+клавиша `l` открывает просмотр лога.
 
 Границы DNS-блокировки: реклама **на сайтах** (баннеры, трекеры,
 домены рекламных сетей) блокируется, но реклама **внутри видео** (YouTube
@@ -146,9 +166,14 @@ sudo vpn tui
 | `c` (Profiles) | активировать и подключить |
 | `u` / `U` | обновить подписку / все подписки |
 | `a` | добавить профиль / подписку |
+| `i` (Profiles) | импорт из файла (URI или native-конфиг) |
+| `p` (Profiles) | вставить URI из буфера обмена |
+| `y` / `Y` (Profiles) | скопировать URI / все URI в буфер |
+| `y` (Subscriptions) | скопировать URL подписки |
 | `e` | редактировать профиль / подписку |
 | `x` | удалить выбранное (с подтверждением) |
-| `enter/space` (Settings) | переключить блокировку / kill switch, править app firewall и split-списки |
+| `enter/space` (Settings) | переключить режимы/тумблеры, цикл stack/level/mux, править все списки |
+| `l` (Other) | просмотр лога |
 | `c` (Other) | проверить обновления |
 | `U` (Other) | установить обновление |
 | `a` (Other) | автообновление вкл/выкл |
