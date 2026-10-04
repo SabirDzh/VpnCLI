@@ -5,6 +5,7 @@ package settings
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -25,6 +26,12 @@ const (
 	kindAppFirewall
 	kindExclude
 	kindInclude
+	kindCycle  // cat: mode|stack|loglevel|dnsstrategy|mux
+	kindToggle // cat: tun|autoroute|strictroute|preset
+	kindAppExclude
+	kindAppInclude
+	kindDNS // dns servers list editor
+	kindNum // cat: mtu|mixedport
 )
 
 // row is one settings line.
@@ -34,7 +41,16 @@ type row struct {
 	value   string
 	ok      *bool // nil = neutral, else green/red dot
 	kind    rowKind
-	cat     string // blocklist kind for kindBlocklist rows
+	cat     string // category inside kind (blocklist kind, cycle id, …)
+}
+
+// cycles map each cycle row to its value list; activate moves to the next.
+var cycles = map[string][]string{
+	"mode":        {"exclude", "include", "off"},
+	"stack":       {"system", "gvisor", "mixed"},
+	"loglevel":    {"debug", "info", "warn", "error"},
+	"dnsstrategy": {"prefer_ipv4", "prefer_ipv6", "ipv4_only", "ipv6_only"},
+	"mux":         {"auto", "on", "off"},
 }
 
 // Model is the Settings tab state.
@@ -48,8 +64,9 @@ type Model struct {
 	width  int
 	toast  component.Toast
 	input  component.Input
-	// editKind is the row being edited via input; 0 = idle.
+	// editKind/editCat identify the row being edited via input.
 	editKind rowKind
+	editCat  string
 }
 
 // New creates the Settings tab. api may be nil: the page then renders
@@ -98,20 +115,32 @@ func (m *Model) rebuild() {
 		{label: "min version", value: info.MinVersion},
 		{label: "binary", value: path},
 		{section: "Network"},
-		{label: "tun", value: tunVal, ok: tunOK},
-		{label: "auto route", value: onOff(info.AutoRoute)},
-		{label: "strict route", value: onOff(info.StrictRoute)},
-		{label: "mixed proxy", value: fmt.Sprintf("127.0.0.1:%d", info.MixedPort)},
-		{section: "Features"},
+		{label: "tun", value: tunVal, ok: tunOK, kind: kindToggle, cat: "tun"},
+		{label: "mtu", value: fmt.Sprintf("%d", info.MTU), kind: kindNum, cat: "mtu"},
+		{label: "stack", value: info.Stack, kind: kindCycle, cat: "stack"},
+		{label: "auto route", value: onOff(info.AutoRoute), kind: kindToggle, cat: "autoroute"},
+		{label: "strict route", value: onOff(info.StrictRoute), kind: kindToggle, cat: "strictroute"},
+		{label: "mixed proxy", value: fmt.Sprintf("127.0.0.1:%d", info.MixedPort), kind: kindNum, cat: "mixedport"},
+		{section: "DNS"},
+		{label: "servers", value: splitValue(info.DNSServers), kind: kindDNS},
+		{label: "strategy", value: info.DNSStrategy, kind: kindCycle, cat: "dnsstrategy"},
+		{section: "Split"},
+		{label: "split mode", value: modeVal(info.SplitMode), kind: kindCycle, cat: "mode"},
+		{label: "apps exclude", value: splitValue(info.SplitExcludeApps), kind: kindAppExclude},
+		{label: "apps include", value: splitValue(info.SplitIncludeApps), kind: kindAppInclude},
+		{label: "preset рф", value: onOff(info.PresetApps), kind: kindToggle, cat: "preset"},
+		{label: "split exclude", value: splitValue(info.SplitExclude), kind: kindExclude},
+		{label: "split include", value: splitValue(info.SplitInclude), kind: kindInclude},
+		{section: "Blocklists"},
 		{label: "adblock", value: onOff(info.Adblock), kind: kindBlocklist, cat: "ads"},
 		{label: "trackerblock", value: onOff(info.TrackerBlock), kind: kindBlocklist, cat: "trackers"},
 		{label: "socialblock", value: onOff(info.SocialBlock), kind: kindBlocklist, cat: "social"},
-		{label: "kill switch", value: onOff(info.KillSwitch), kind: kindKillSwitch},
+		{section: "Firewall"},
 		{label: "app firewall", value: splitValue(info.AppFirewall), kind: kindAppFirewall},
-		{label: "split exclude", value: splitValue(info.SplitExclude), kind: kindExclude},
-		{label: "split include", value: splitValue(info.SplitInclude), kind: kindInclude},
+		{label: "kill switch", value: onOff(info.KillSwitch), kind: kindKillSwitch},
+		{label: "multiplex", value: info.Multiplex, kind: kindCycle, cat: "mux"},
 		{section: "App"},
-		{label: "log level", value: info.LogLevel},
+		{label: "log level", value: info.LogLevel, kind: kindCycle, cat: "loglevel"},
 		{label: "privileged", value: privVal, ok: privOK},
 		{label: "config dir", value: info.ConfigDir},
 		{label: "data dir", value: info.DataDir},
@@ -161,6 +190,19 @@ func onOff(b bool) string {
 		return "on"
 	}
 	return "off"
+}
+
+// modeVal shows the split mode in Russian; cycling uses raw values.
+func modeVal(m string) string {
+	switch m {
+	case "exclude":
+		return "кроме"
+	case "include":
+		return "только"
+	case "off":
+		return "выкл"
+	}
+	return m
 }
 
 func (m *Model) clamp() {
@@ -256,9 +298,37 @@ func (m *Model) activate() (shared.Screen, tea.Cmd) {
 		err = m.api.SetBlocklist(r.cat, !cur)
 	case kindKillSwitch:
 		err = m.api.SetKillSwitch(!m.info.KillSwitch)
+	case kindCycle:
+		err = m.nextCycle(r.cat)
+	case kindToggle:
+		err = m.toggleBool(r.cat)
+	case kindNum:
+		var title, cur string
+		if r.cat == "mtu" {
+			title = "MTU:"
+			cur = fmt.Sprintf("%d", m.info.MTU)
+		} else {
+			title = "Mixed порт:"
+			cur = fmt.Sprintf("%d", m.info.MixedPort)
+		}
+		m.editKind, m.editCat = kindNum, r.cat
+		m.input.Open(title, cur)
+		return m, nil
+	case kindDNS:
+		m.editKind = kindDNS
+		m.input.Open("DNS серверы (через запятую, до 3):", strings.Join(m.info.DNSServers, ", "))
+		return m, nil
 	case kindAppFirewall:
 		m.editKind = kindAppFirewall
 		m.input.Open("App firewall (имена процессов через запятую):", strings.Join(m.info.AppFirewall, ", "))
+		return m, nil
+	case kindAppExclude:
+		m.editKind = kindAppExclude
+		m.input.Open("Приложения «кроме» (процессы через запятую):", strings.Join(m.info.SplitExcludeApps, ", "))
+		return m, nil
+	case kindAppInclude:
+		m.editKind = kindAppInclude
+		m.input.Open("Приложения «только» (процессы через запятую):", strings.Join(m.info.SplitIncludeApps, ", "))
 		return m, nil
 	case kindExclude:
 		m.editKind = kindExclude
@@ -279,6 +349,59 @@ func (m *Model) activate() (shared.Screen, tea.Cmd) {
 	return m, m.showToast("Сохранено — применится при следующем подключении", true)
 }
 
+// nextCycle moves the current value of a cycle row to the next choice.
+func (m *Model) nextCycle(cat string) error {
+	choices := cycles[cat]
+	var cur string
+	switch cat {
+	case "mode":
+		cur = m.info.SplitMode
+	case "stack":
+		cur = m.info.Stack
+	case "loglevel":
+		cur = m.info.LogLevel
+	case "dnsstrategy":
+		cur = m.info.DNSStrategy
+	case "mux":
+		cur = m.info.Multiplex
+	}
+	next := choices[0]
+	for i, c := range choices {
+		if c == cur {
+			next = choices[(i+1)%len(choices)]
+			break
+		}
+	}
+	switch cat {
+	case "mode":
+		return m.api.SetSplitMode(next)
+	case "stack":
+		return m.api.SetStack(next)
+	case "loglevel":
+		return m.api.SetLogLevel(next)
+	case "dnsstrategy":
+		return m.api.SetDNSstrategy(next)
+	case "mux":
+		return m.api.SetMultiplex(next)
+	}
+	return nil
+}
+
+// toggleBool flips a boolean toggle row.
+func (m *Model) toggleBool(cat string) error {
+	switch cat {
+	case "tun":
+		return m.api.SetTUNEnabled(!m.info.TUNEnabled)
+	case "autoroute":
+		return m.api.SetAutoRoute(!m.info.AutoRoute)
+	case "strictroute":
+		return m.api.SetStrictRoute(!m.info.StrictRoute)
+	case "preset":
+		return m.api.SetPresetApps(!m.info.PresetApps)
+	}
+	return nil
+}
+
 func (m *Model) showToast(text string, ok bool) tea.Cmd {
 	return m.toast.Show(text, ok, func(id int) tea.Msg {
 		return shared.ToastExpiredMsg{ID: id}
@@ -294,9 +417,7 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	switch kp.String() {
 	case "enter":
 		value := m.input.Value()
-		m.input.Close()
-		kind := m.editKind
-		m.editKind = kindNone
+		kind, cat := m.editKind, m.editCat
 		var list []string
 		for _, tok := range strings.Split(value, ",") {
 			tok = strings.TrimSpace(tok)
@@ -304,10 +425,41 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 				list = append(list, tok)
 			}
 		}
+		if kind == kindNum {
+			// parse before closing: invalid numbers keep the editor open
+			n, perr := strconv.Atoi(strings.Join(list, ""))
+			if perr != nil {
+				return m, m.showToast("Ошибка: нужно число", false)
+			}
+			m.input.Close()
+			m.editKind, m.editCat = kindNone, ""
+			var err error
+			if cat == "mtu" {
+				err = m.api.SetMTU(n)
+			} else {
+				err = m.api.SetMixedPort(n)
+			}
+			if err != nil {
+				// range/validation errors (config.Validate) reopen nothing:
+				// the editor closed, the toast explains the problem.
+				return m, m.showToast("Ошибка: "+err.Error(), false)
+			}
+			m.info = m.api.Snapshot()
+			m.rebuild()
+			return m, m.showToast("Сохранено — применится при следующем подключении", true)
+		}
+		m.input.Close()
+		m.editKind, m.editCat = kindNone, ""
 		var err error
 		switch kind {
+		case kindDNS:
+			err = m.api.SetDNSServers(list)
 		case kindAppFirewall:
 			err = m.api.SetAppFirewall(list)
+		case kindAppExclude:
+			err = m.api.SetSplitApps("exclude", list)
+		case kindAppInclude:
+			err = m.api.SetSplitApps("include", list)
 		case kindExclude:
 			err = m.api.SetSplit(list, m.info.SplitInclude)
 		case kindInclude:
@@ -321,7 +473,7 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		return m, m.showToast("Сохранено — применится при следующем подключении", true)
 	case "esc":
 		m.input.Close()
-		m.editKind = kindNone
+		m.editKind, m.editCat = kindNone, ""
 		return m, nil
 	default:
 		m.input.Key(kp.String())
@@ -333,14 +485,21 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
 	b.WriteString(m.styles.Title.Render("Settings") + "\n\n")
-	if m.offset >= len(m.rows) {
-		m.offset = max(0, len(m.rows)-1)
-	}
-	visible := m.rows[m.offset:]
 	maxRows := height - 4
 	if maxRows < 1 {
 		maxRows = 1
 	}
+	// the window follows the cursor so every row stays reachable
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+maxRows {
+		m.offset = m.cursor - maxRows + 1
+	}
+	if m.offset >= len(m.rows) {
+		m.offset = max(0, len(m.rows)-1)
+	}
+	visible := m.rows[m.offset:]
 	if len(visible) > maxRows {
 		visible = visible[:maxRows]
 	}

@@ -108,14 +108,22 @@ func buildSettingsInfo(cfg config.Config, paths platform.Paths) shared.SettingsI
 		DataDir:      paths.DataDir,
 		StateFile:    paths.StateFile,
 		LogFile:      paths.LogFile,
-		Adblock:      cfg.Features.Adblock,
-		TrackerBlock: cfg.Features.TrackerBlock,
-		SocialBlock:  cfg.Features.SocialBlock,
-		KillSwitch:   cfg.Features.KillSwitch,
-		SplitExclude: cfg.Features.SplitExclude,
-		SplitInclude: cfg.Features.SplitInclude,
-		AppFirewall:  cfg.Features.AppFirewall,
-		AutoUpdate:   cfg.Update.Auto,
+		Adblock:          cfg.Features.Adblock,
+		TrackerBlock:     cfg.Features.TrackerBlock,
+		SocialBlock:      cfg.Features.SocialBlock,
+		KillSwitch:       cfg.Features.KillSwitch,
+		SplitMode:        cfg.Features.SplitMode,
+		SplitExclude:     cfg.Features.SplitExclude,
+		SplitInclude:     cfg.Features.SplitInclude,
+		SplitExcludeApps: cfg.Features.SplitExcludeApps,
+		SplitIncludeApps: cfg.Features.SplitIncludeApps,
+		PresetApps:       cfg.Features.PresetApps,
+		AppFirewall:      cfg.Features.AppFirewall,
+		Multiplex:        cfg.Features.Multiplex,
+		DNSServers:       cfg.DNS.Servers,
+		DNSStrategy:      cfg.DNS.Strategy,
+		Stack:            cfg.TUN.Stack,
+		AutoUpdate:       cfg.Update.Auto,
 	}
 	if bin, err := singbox.FindBinary(info.SingBoxPath); err != nil {
 		info.SingBoxErr = "not found in PATH"
@@ -168,6 +176,78 @@ func (a settingsAPI) SetAppFirewall(apps []string) error {
 
 func (a settingsAPI) SetKillSwitch(on bool) error {
 	_, err := a.svc.Update(func(c *config.Config) { c.Features.KillSwitch = on })
+	return err
+}
+
+func (a settingsAPI) SetSplitMode(mode string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.SplitMode = mode })
+	return err
+}
+
+func (a settingsAPI) SetSplitApps(which string, apps []string) error {
+	_, err := a.svc.Update(func(c *config.Config) {
+		switch which {
+		case "exclude":
+			c.Features.SplitExcludeApps = apps
+		case "include":
+			c.Features.SplitIncludeApps = apps
+		}
+	})
+	return err
+}
+
+func (a settingsAPI) SetPresetApps(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.PresetApps = on })
+	return err
+}
+
+func (a settingsAPI) SetMultiplex(mode string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.Multiplex = mode })
+	return err
+}
+
+func (a settingsAPI) SetDNSServers(servers []string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.DNS.Servers = servers })
+	return err
+}
+
+func (a settingsAPI) SetDNSstrategy(strategy string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.DNS.Strategy = strategy })
+	return err
+}
+
+func (a settingsAPI) SetTUNEnabled(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.TUN.Enabled = on })
+	return err
+}
+
+func (a settingsAPI) SetMTU(mtu int) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.TUN.MTU = mtu })
+	return err
+}
+
+func (a settingsAPI) SetStack(stack string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.TUN.Stack = stack })
+	return err
+}
+
+func (a settingsAPI) SetAutoRoute(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.TUN.AutoRoute = on })
+	return err
+}
+
+func (a settingsAPI) SetStrictRoute(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.TUN.StrictRoute = on })
+	return err
+}
+
+func (a settingsAPI) SetMixedPort(port int) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.MixedPort = port })
+	return err
+}
+
+func (a settingsAPI) SetLogLevel(level string) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Log.Level = level })
 	return err
 }
 

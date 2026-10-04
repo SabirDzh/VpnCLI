@@ -14,12 +14,24 @@ import (
 func testInfo() shared.SettingsInfo {
 	return shared.SettingsInfo{
 		CoreDefault: "sing-box", SingBoxVersion: "1.14.2", MinVersion: "1.14.0",
-		LogLevel: "info", TUNEnabled: true, MTU: 9000,
+		LogLevel: "info", TUNEnabled: true, MTU: 9000, Stack: "system",
 		AutoRoute: true, StrictRoute: true, MixedPort: 10808,
 		Privileged: false, ConfigDir: "/c", DataDir: "/d",
 		StateFile: "/s", LogFile: "/l",
-		SplitExclude: []string{"bank.example", "192.168.0.0/16"},
+		SplitExclude:     []string{"bank.example", "192.168.0.0/16"},
+		SplitMode:        "exclude",
+		PresetApps:       true,
+		Multiplex:        "auto",
+		DNSServers:       []string{"1.1.1.1", "8.8.8.8"},
+		DNSStrategy:      "prefer_ipv4",
+		SplitExcludeApps: []string{"Госуслуги"},
 	}
+}
+
+// downToCat2 moves to a row with the given kind and cat.
+func downToCat2(t *testing.T, m *Model, k rowKind, cat string) *Model {
+	t.Helper()
+	return downToLabel(t, m, func(r row) bool { return r.kind == k && r.cat == cat })
 }
 
 func newModel(api *fakes.FakeSettings) (*Model, *fakes.FakeSettings) {
@@ -115,6 +127,125 @@ func TestToggleSocialBlock(t *testing.T) {
 	_ = ns
 	if len(api.BlockCalls) != 1 || api.BlockCalls[0] != (fakes.BlockCall{Kind: "social", On: true}) {
 		t.Fatalf("BlockCalls = %v", api.BlockCalls)
+	}
+}
+
+func TestSplitModeCycle(t *testing.T) {
+	m, api := newModel(nil)
+	m = downToCat2(t, m, kindCycle, "mode")
+	ns, _ := m.Update(tea.KeyPressMsg{Code: ' '})
+	_ = ns
+	if len(api.SplitModeCalls) != 1 || api.SplitModeCalls[0] != "include" {
+		t.Fatalf("mode calls: %v", api.SplitModeCalls)
+	}
+}
+
+func TestToggleTUNAndPreset(t *testing.T) {
+	m, api := newModel(nil)
+	m = downToCat2(t, m, kindToggle, "tun")
+	ns, _ := m.Update(tea.KeyPressMsg{Code: ' '})
+	_ = ns
+	if len(api.TUNCalls) != 1 || api.TUNCalls[0] != false {
+		t.Fatalf("tun calls: %v", api.TUNCalls)
+	}
+	m = downToCat2(t, m, kindToggle, "preset")
+	ns, _ = m.Update(tea.KeyPressMsg{Code: ' '})
+	_ = ns
+	if len(api.PresetCalls) != 1 || api.PresetCalls[0] != false {
+		t.Fatalf("preset calls: %v", api.PresetCalls)
+	}
+}
+
+func TestEditSplitAppsExclude(t *testing.T) {
+	m, api := newModel(nil)
+	m = downTo(t, m, kindAppExclude)
+	ns, _ := m.Update(kf('\r'))
+	mm := ns.(*Model)
+	if !mm.input.Showing() {
+		t.Fatal("must open input")
+	}
+	if got := mm.input.Value(); got != "Госуслуги" {
+		t.Fatalf("prefilled %q", got)
+	}
+	ns, _ = mm.Update(kf('X'))
+	_, cmd := ns.Update(kf('\r'))
+	if cmd == nil {
+		t.Fatal("enter must submit")
+	}
+	_ = cmd()
+	if len(api.SplitAppsCalls) != 1 || api.SplitAppsCalls[0].Which != "exclude" ||
+		len(api.SplitAppsCalls[0].Apps) != 1 || api.SplitAppsCalls[0].Apps[0] != "ГосуслугиX" {
+		t.Fatalf("calls: %+v", api.SplitAppsCalls)
+	}
+}
+
+func TestEditDNSServers(t *testing.T) {
+	m, api := newModel(nil)
+	m = downTo(t, m, kindDNS)
+	ns, _ := m.Update(kf('\r'))
+	mm := ns.(*Model)
+	if got := mm.input.Value(); got != "1.1.1.1, 8.8.8.8" {
+		t.Fatalf("prefilled %q", got)
+	}
+	ns, _ = mm.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(kf('9'))
+	ns, _ = ns.Update(kf('.'))
+	ns, _ = ns.Update(kf('9'))
+	ns, _ = ns.Update(kf('.'))
+	ns, _ = ns.Update(kf('9'))
+	ns, _ = ns.Update(kf('.'))
+	ns, _ = ns.Update(kf('9'))
+	_, cmd := ns.Update(kf('\r'))
+	_ = cmd()
+	if len(api.DNSServersCalls) != 1 {
+		t.Fatalf("dns calls: %v", api.DNSServersCalls)
+	}
+	if api.DNSServersCalls[0][1] != "9.9.9.9" {
+		t.Fatalf("servers: %v", api.DNSServersCalls[0])
+	}
+}
+
+func TestEditMTUNum(t *testing.T) {
+	m, api := newModel(nil)
+	m = downToCat2(t, m, kindNum, "mtu")
+	ns, _ := m.Update(kf('\r'))
+	mm := ns.(*Model)
+	if got := mm.input.Value(); got != "9000" {
+		t.Fatalf("prefilled %q", got)
+	}
+	// backspace twice → "90", append "00" → 9000 again; then 5 → 90005 invalid
+	ns, _ = mm.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	ns, _ = ns.Update(kf('1'))
+	_, cmd := ns.Update(kf('\r'))
+	_ = cmd()
+	if len(api.MTUCalls) != 1 || api.MTUCalls[0] != 9001 {
+		t.Fatalf("mtu calls: %v", api.MTUCalls)
+	}
+}
+
+func TestEditMTUInvalidKeepsInput(t *testing.T) {
+	m, api := newModel(nil)
+	m = downToCat2(t, m, kindNum, "mtu")
+	ns, _ := m.Update(kf('\r'))
+	mm := ns.(*Model)
+	ns, _ = mm.Update(kf('a'))
+	ns, cmd := ns.Update(kf('\r'))
+	mm = ns.(*Model)
+	if cmd == nil {
+		t.Fatal("enter must be handled")
+	}
+	_ = cmd()
+	if len(api.MTUCalls) != 0 {
+		t.Fatalf("invalid input must not save: %v", api.MTUCalls)
+	}
+	if !mm.input.Showing() {
+		t.Fatal("input must stay open on invalid number")
 	}
 }
 

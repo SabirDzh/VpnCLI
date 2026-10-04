@@ -12,6 +12,12 @@ type BlockCall struct {
 	On   bool
 }
 
+// SplitAppsCall records one SetSplitApps invocation.
+type SplitAppsCall struct {
+	Which string
+	Apps  []string
+}
+
 // FakeSettings is an in-memory shared.SettingsAPI.
 type FakeSettings struct {
 	Info             shared.SettingsInfo
@@ -19,6 +25,19 @@ type FakeSettings struct {
 	BlockCalls       []BlockCall
 	AppFirewallCalls [][]string
 	KillSwitchCalls  []bool
+	SplitModeCalls   []string
+	SplitAppsCalls   []SplitAppsCall
+	PresetCalls      []bool
+	MuxCalls         []string
+	DNSServersCalls  [][]string
+	DNSstrategyCalls []string
+	TUNCalls         []bool
+	MTUCalls         []int
+	StackCalls       []string
+	AutoRouteCalls   []bool
+	StrictRouteCalls []bool
+	MixedPortCalls   []int
+	LogLevelCalls    []string
 	SplitCalls       [][2][]string
 	AutoCalls        []bool
 	Snapshots        int
@@ -64,6 +83,141 @@ func (f *FakeSettings) SetKillSwitch(on bool) error {
 	}
 	f.KillSwitchCalls = append(f.KillSwitchCalls, on)
 	f.Info.KillSwitch = on
+	return nil
+}
+
+// SetSplitMode implements shared.SettingsAPI.
+func (f *FakeSettings) SetSplitMode(mode string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.SplitModeCalls = append(f.SplitModeCalls, mode)
+	f.Info.SplitMode = mode
+	return nil
+}
+
+// SetSplitApps implements shared.SettingsAPI.
+func (f *FakeSettings) SetSplitApps(which string, apps []string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.SplitAppsCalls = append(f.SplitAppsCalls, SplitAppsCall{Which: which, Apps: apps})
+	switch which {
+	case "exclude":
+		f.Info.SplitExcludeApps = apps
+	case "include":
+		f.Info.SplitIncludeApps = apps
+	}
+	return nil
+}
+
+// SetPresetApps implements shared.SettingsAPI.
+func (f *FakeSettings) SetPresetApps(on bool) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.PresetCalls = append(f.PresetCalls, on)
+	f.Info.PresetApps = on
+	return nil
+}
+
+// SetMultiplex implements shared.SettingsAPI.
+func (f *FakeSettings) SetMultiplex(mode string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.MuxCalls = append(f.MuxCalls, mode)
+	f.Info.Multiplex = mode
+	return nil
+}
+
+// SetDNSServers implements shared.SettingsAPI.
+func (f *FakeSettings) SetDNSServers(servers []string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.DNSServersCalls = append(f.DNSServersCalls, servers)
+	f.Info.DNSServers = servers
+	return nil
+}
+
+// SetDNSstrategy implements shared.SettingsAPI.
+func (f *FakeSettings) SetDNSstrategy(strategy string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.DNSstrategyCalls = append(f.DNSstrategyCalls, strategy)
+	f.Info.DNSStrategy = strategy
+	return nil
+}
+
+// SetTUNEnabled implements shared.SettingsAPI.
+func (f *FakeSettings) SetTUNEnabled(on bool) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.TUNCalls = append(f.TUNCalls, on)
+	f.Info.TUNEnabled = on
+	return nil
+}
+
+// SetMTU implements shared.SettingsAPI.
+func (f *FakeSettings) SetMTU(mtu int) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.MTUCalls = append(f.MTUCalls, mtu)
+	f.Info.MTU = mtu
+	return nil
+}
+
+// SetStack implements shared.SettingsAPI.
+func (f *FakeSettings) SetStack(stack string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.StackCalls = append(f.StackCalls, stack)
+	f.Info.Stack = stack
+	return nil
+}
+
+// SetAutoRoute implements shared.SettingsAPI.
+func (f *FakeSettings) SetAutoRoute(on bool) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.AutoRouteCalls = append(f.AutoRouteCalls, on)
+	f.Info.AutoRoute = on
+	return nil
+}
+
+// SetStrictRoute implements shared.SettingsAPI.
+func (f *FakeSettings) SetStrictRoute(on bool) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.StrictRouteCalls = append(f.StrictRouteCalls, on)
+	f.Info.StrictRoute = on
+	return nil
+}
+
+// SetMixedPort implements shared.SettingsAPI.
+func (f *FakeSettings) SetMixedPort(port int) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.MixedPortCalls = append(f.MixedPortCalls, port)
+	f.Info.MixedPort = port
+	return nil
+}
+
+// SetLogLevel implements shared.SettingsAPI.
+func (f *FakeSettings) SetLogLevel(level string) error {
+	if f.SetErr != nil {
+		return f.SetErr
+	}
+	f.LogLevelCalls = append(f.LogLevelCalls, level)
+	f.Info.LogLevel = level
 	return nil
 }
 

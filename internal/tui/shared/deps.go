@@ -37,6 +37,7 @@ type SettingsInfo struct {
 	LogLevel       string
 	TUNEnabled     bool
 	MTU            int
+	Stack          string
 	AutoRoute      bool
 	StrictRoute    bool
 	MixedPort      int
@@ -46,13 +47,21 @@ type SettingsInfo struct {
 	StateFile      string
 	LogFile        string
 	// Features (TUI-managed, applied on next connect).
-	Adblock      bool
-	TrackerBlock bool
-	SocialBlock  bool
-	KillSwitch   bool
-	SplitExclude []string
-	SplitInclude []string
-	AppFirewall  []string
+	Adblock          bool
+	TrackerBlock     bool
+	SocialBlock      bool
+	KillSwitch       bool
+	SplitMode        string // exclude|include|off
+	SplitExclude     []string
+	SplitInclude     []string
+	SplitExcludeApps []string
+	SplitIncludeApps []string
+	PresetApps       bool
+	AppFirewall      []string
+	Multiplex        string // off|on|auto
+	// DNS settings.
+	DNSServers  []string
+	DNSStrategy string
 	// Update settings.
 	AutoUpdate bool
 }
@@ -65,6 +74,21 @@ type SettingsAPI interface {
 	SetBlocklist(kind string, on bool) error
 	SetAppFirewall(apps []string) error
 	SetKillSwitch(on bool) error
+	// SetSplitMode switches the split tunneling mode: exclude|include|off.
+	SetSplitMode(mode string) error
+	// SetSplitApps edits an app list: which is exclude|include.
+	SetSplitApps(which string, apps []string) error
+	SetPresetApps(on bool) error
+	SetMultiplex(mode string) error
+	SetDNSServers(servers []string) error
+	SetDNSstrategy(strategy string) error
+	SetTUNEnabled(on bool) error
+	SetMTU(mtu int) error
+	SetStack(stack string) error
+	SetAutoRoute(on bool) error
+	SetStrictRoute(on bool) error
+	SetMixedPort(port int) error
+	SetLogLevel(level string) error
 	SetSplit(exclude, include []string) error
 	SetAutoUpdate(on bool) error
 }
