@@ -22,6 +22,11 @@ Windows (PowerShell, для TUN запускать как Administrator):
 irm https://raw.githubusercontent.com/SabirDzh/VpnCLI/master/install.ps1 | iex
 ```
 
+Скрипт ставит и сам CLI, и ядро sing-box (≥ 1.14): сначала пробует
+winget, затем choco и scoop, в крайнем случае качает sing-box и wintun
+напрямую с апстрима. Для TUN нужны права администратора и `wintun.dll`
+рядом с `sing-box.exe` (установщик кладет сам).
+
 Требования: sing-box ≥ 1.14 в PATH, для TUN — root (Linux/macOS) или
 Administrator (Windows, плюс wintun.dll рядом с sing-box).
 
