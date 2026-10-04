@@ -6,6 +6,7 @@ package shared
 
 import (
 	"context"
+	"time"
 
 	"github.com/SabirDzh/VpnCLI/internal/app"
 	"github.com/SabirDzh/VpnCLI/internal/domain"
@@ -14,11 +15,15 @@ import (
 // Deps wires services into the TUI. ReadOnly is set when the process
 // lacks TUN privileges: lists and status work, up/down refuse cleanly.
 type Deps struct {
-	Connection ConnectionAPI
-	Profiles   ProfileAPI
-	Subs       SubscriptionAPI
-	Settings   SettingsInfo
-	ReadOnly   bool
+	Connection  ConnectionAPI
+	Profiles    ProfileAPI
+	Subs        SubscriptionAPI
+	Settings    SettingsInfo
+	SettingsAPI SettingsAPI
+	Update      UpdateAPI
+	Version     string
+	Repo        string
+	ReadOnly    bool
 }
 
 // SettingsInfo is a snapshot of the effective configuration and
@@ -40,6 +45,31 @@ type SettingsInfo struct {
 	DataDir        string
 	StateFile      string
 	LogFile        string
+	// Features (TUI-managed, applied on next connect).
+	Adblock      bool
+	TrackerBlock bool
+	SplitExclude []string
+	SplitInclude []string
+	// Update settings.
+	AutoUpdate bool
+}
+
+// SettingsAPI reads and changes persisted settings. Snapshot reflects the
+// file state after the last Set* call.
+type SettingsAPI interface {
+	Snapshot() SettingsInfo
+	SetAdblock(on bool) error
+	SetTrackerBlock(on bool) error
+	SetSplit(exclude, include []string) error
+	SetAutoUpdate(on bool) error
+}
+
+// UpdateAPI checks and installs CLI updates and reports last-run dates.
+type UpdateAPI interface {
+	Check(ctx context.Context) (app.CheckResult, error)
+	Update(ctx context.Context, tag string) error
+	LastCheck() time.Time
+	LastUpdated() time.Time
 }
 
 // ConnectionAPI is the subset of ConnectionService the TUI needs.
@@ -55,6 +85,7 @@ type ProfileAPI interface {
 	Add(uri string) (domain.Profile, error)
 	Use(idOrName string) (domain.Profile, error)
 	Remove(idOrName string) error
+	Edit(idOrName, name, uri string) (domain.Profile, error)
 	Active() (domain.Profile, error)
 }
 
@@ -64,4 +95,5 @@ type SubscriptionAPI interface {
 	Add(name, url string) (domain.Subscription, error)
 	Update(idOrName string) (int, error)
 	Remove(idOrName string) error
+	Edit(idOrName, name, url string) (domain.Subscription, error)
 }

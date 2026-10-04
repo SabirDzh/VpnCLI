@@ -2,9 +2,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -80,18 +83,26 @@ func run() error {
 	profileSvc := app.NewProfileService(store)
 	subSvc := app.NewSubscriptionService(store, store)
 	connSvc := app.NewConnectionService(store, reg, cfg, paths)
-	updateSvc := app.NewUpdateService("SabirDzh/VpnCLI", version)
+	updateSvc := app.NewUpdateService("SabirDzh/VpnCLI", version, paths.DataDir)
+	configPath := cfgFile
+	if configPath == "" {
+		configPath = filepath.Join(paths.ConfigDir, "config.yaml")
+	}
+	settingsSvc := app.NewSettingsService(configPath)
 
 	root := cli.NewRootCmd(cli.Deps{
-		Config:  cfg,
-		Paths:   paths,
-		Store:   store,
-		Reg:     reg,
-		Profile: profileSvc,
-		Sub:     subSvc,
-		Conn:    connSvc,
-		Update:  updateSvc,
-		Version: version,
+		Config:      cfg,
+		ConfigPath:  configPath,
+		Paths:       paths,
+		Store:       store,
+		Reg:         reg,
+		Profile:     profileSvc,
+		Sub:         subSvc,
+		Conn:        connSvc,
+		Update:      updateSvc,
+		SettingsSvc: settingsSvc,
+		Version:     version,
+		Repo:        "SabirDzh/VpnCLI",
 	})
 	// Re-attach persistent flags to the real tree.
 	root.PersistentFlags().StringVar(&cfgFile, "config", cfgFile, "config file path")
@@ -102,6 +113,15 @@ func run() error {
 	root.SetErr(os.Stderr)
 
 	log.Debug("starting", "core", cfg.Core.Default)
+	if cfg.Update.Auto {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			if v, err := updateSvc.AutoCheck(ctx); err == nil && v != "" {
+				log.Info("vpn auto-updated, restart to apply", "version", v)
+			}
+		}()
+	}
 	return root.Execute()
 }
 

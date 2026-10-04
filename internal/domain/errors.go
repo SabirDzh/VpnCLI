@@ -8,6 +8,8 @@ import "errors"
 var (
 	// ErrProfileNotFound is returned when no profile matches id or name.
 	ErrProfileNotFound = errors.New("profile not found")
+	// ErrProfileManaged is returned when editing a profile owned by a subscription.
+	ErrProfileManaged = errors.New("profile is managed by a subscription")
 	// ErrSubscriptionNotFound is returned when no subscription matches.
 	ErrSubscriptionNotFound = errors.New("subscription not found")
 	// ErrCoreNotFound is returned for unknown core names.

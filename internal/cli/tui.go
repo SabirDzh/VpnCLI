@@ -6,9 +6,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
+
+	"github.com/SabirDzh/VpnCLI/internal/config"
 
 	"github.com/SabirDzh/VpnCLI/internal/app"
 	"github.com/SabirDzh/VpnCLI/internal/core/singbox"
@@ -32,11 +35,15 @@ func NewTUICmd(d Deps) *cobra.Command {
 				syscall.SIGINT, syscall.SIGTERM)
 			defer stop()
 			return tui.Run(ctx, shared.Deps{
-				Connection: connAdapter{svc: d.Conn},
-				Profiles:   profileAdapter{svc: d.Profile, store: d.Store},
-				Subs:       subAdapter{svc: d.Sub},
-				Settings:   buildSettingsInfo(d),
-				ReadOnly:   !platform.IsPrivileged(),
+				Connection:  connAdapter{svc: d.Conn},
+				Profiles:    profileAdapter{svc: d.Profile, store: d.Store},
+				Subs:        subAdapter{svc: d.Sub},
+				Settings:    buildSettingsInfo(d.Config, d.Paths),
+				SettingsAPI: settingsAPI{svc: d.SettingsSvc, cfgPath: d.ConfigPath, paths: d.Paths},
+				Update:      updateAPI{svc: d.Update},
+				Version:     d.Version,
+				Repo:        d.Repo,
+				ReadOnly:    !platform.IsPrivileged(),
 			})
 		},
 	}
@@ -76,27 +83,36 @@ func (a profileAdapter) Use(id string) (domain.Profile, error) { return a.svc.Us
 
 func (a profileAdapter) Remove(id string) error { return a.svc.Remove(id) }
 
+func (a profileAdapter) Edit(idOrName, name, uri string) (domain.Profile, error) {
+	return a.svc.Edit(idOrName, name, uri)
+}
+
 func (a profileAdapter) Active() (domain.Profile, error) {
 	return a.store.ActiveProfile()
 }
 
 // buildSettingsInfo snapshots the effective config and core state.
-func buildSettingsInfo(d Deps) shared.SettingsInfo {
+func buildSettingsInfo(cfg config.Config, paths platform.Paths) shared.SettingsInfo {
 	info := shared.SettingsInfo{
-		CoreDefault: d.Config.Core.Default,
-		SingBoxPath: d.Config.Core.SingBox.Path,
-		MinVersion:  d.Config.Core.SingBox.MinVers,
-		LogLevel:    d.Config.Log.Level,
-		TUNEnabled:  d.Config.TUN.Enabled,
-		MTU:         d.Config.TUN.MTU,
-		AutoRoute:   d.Config.TUN.AutoRoute,
-		StrictRoute: d.Config.TUN.StrictRoute,
-		MixedPort:   d.Config.MixedPort,
-		Privileged:  platform.IsPrivileged(),
-		ConfigDir:   d.Paths.ConfigDir,
-		DataDir:     d.Paths.DataDir,
-		StateFile:   d.Paths.StateFile,
-		LogFile:     d.Paths.LogFile,
+		CoreDefault:  cfg.Core.Default,
+		SingBoxPath:  cfg.Core.SingBox.Path,
+		MinVersion:   cfg.Core.SingBox.MinVers,
+		LogLevel:     cfg.Log.Level,
+		TUNEnabled:   cfg.TUN.Enabled,
+		MTU:          cfg.TUN.MTU,
+		AutoRoute:    cfg.TUN.AutoRoute,
+		StrictRoute:  cfg.TUN.StrictRoute,
+		MixedPort:    cfg.MixedPort,
+		Privileged:   platform.IsPrivileged(),
+		ConfigDir:    paths.ConfigDir,
+		DataDir:      paths.DataDir,
+		StateFile:    paths.StateFile,
+		LogFile:      paths.LogFile,
+		Adblock:      cfg.Features.Adblock,
+		TrackerBlock: cfg.Features.TrackerBlock,
+		SplitExclude: cfg.Features.SplitExclude,
+		SplitInclude: cfg.Features.SplitInclude,
+		AutoUpdate:   cfg.Update.Auto,
 	}
 	if bin, err := singbox.FindBinary(info.SingBoxPath); err != nil {
 		info.SingBoxErr = "not found in PATH"
@@ -107,6 +123,58 @@ func buildSettingsInfo(d Deps) shared.SettingsInfo {
 	}
 	return info
 }
+
+// settingsAPI narrows the config-file service to shared.SettingsAPI.
+type settingsAPI struct {
+	svc     *app.SettingsService
+	cfgPath string
+	paths   platform.Paths
+}
+
+func (a settingsAPI) Snapshot() shared.SettingsInfo {
+	cfg, err := config.Load(a.cfgPath, nil)
+	if err != nil {
+		return shared.SettingsInfo{}
+	}
+	return buildSettingsInfo(cfg, a.paths)
+}
+
+func (a settingsAPI) SetAdblock(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.Adblock = on })
+	return err
+}
+
+func (a settingsAPI) SetTrackerBlock(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Features.TrackerBlock = on })
+	return err
+}
+
+func (a settingsAPI) SetSplit(exclude, include []string) error {
+	_, err := a.svc.Update(func(c *config.Config) {
+		c.Features.SplitExclude = exclude
+		c.Features.SplitInclude = include
+	})
+	return err
+}
+
+func (a settingsAPI) SetAutoUpdate(on bool) error {
+	_, err := a.svc.Update(func(c *config.Config) { c.Update.Auto = on })
+	return err
+}
+
+// updateAPI narrows UpdateService to shared.UpdateAPI.
+type updateAPI struct{ svc *app.UpdateService }
+
+func (a updateAPI) Check(ctx context.Context) (app.CheckResult, error) {
+	return a.svc.Check(ctx)
+}
+
+func (a updateAPI) Update(ctx context.Context, tag string) error {
+	return a.svc.Update(ctx, tag)
+}
+
+func (a updateAPI) LastCheck() time.Time   { return a.svc.LastCheck() }
+func (a updateAPI) LastUpdated() time.Time { return a.svc.LastUpdated() }
 
 // subAdapter narrows SubscriptionService to shared.SubscriptionAPI.
 type subAdapter struct{ svc *app.SubscriptionService }
@@ -120,3 +188,7 @@ func (a subAdapter) Add(name, url string) (domain.Subscription, error) {
 func (a subAdapter) Update(id string) (int, error) { return a.svc.Update(id) }
 
 func (a subAdapter) Remove(id string) error { return a.svc.Remove(id) }
+
+func (a subAdapter) Edit(idOrName, name, url string) (domain.Subscription, error) {
+	return a.svc.Edit(idOrName, name, url)
+}

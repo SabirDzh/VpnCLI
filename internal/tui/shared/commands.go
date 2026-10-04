@@ -129,6 +129,17 @@ func DoRemove(profiles ProfileAPI, id, label string) tea.Cmd {
 	}
 }
 
+// DoProfileEdit renames a profile and optionally replaces it from a new URI.
+func DoProfileEdit(profiles ProfileAPI, id, name, uri, fallback string) tea.Cmd {
+	return func() tea.Msg {
+		p, err := profiles.Edit(id, name, uri)
+		if err != nil {
+			return OpDoneMsg{Op: "edit", Label: fallback, Err: err}
+		}
+		return OpDoneMsg{Op: "edit", Label: p.Name}
+	}
+}
+
 // FetchSubs loads subscriptions with profile counts.
 func FetchSubs(profiles ProfileAPI, subs SubscriptionAPI) tea.Cmd {
 	return func() tea.Msg {
@@ -161,6 +172,17 @@ func DoSubAdd(subs SubscriptionAPI, name, url string) tea.Cmd {
 func DoSubRemove(subs SubscriptionAPI, id, label string) tea.Cmd {
 	return func() tea.Msg {
 		return OpDoneMsg{Op: "sub-remove", Label: label, Err: subs.Remove(id)}
+	}
+}
+
+// DoSubEdit changes a subscription's name and/or URL.
+func DoSubEdit(subs SubscriptionAPI, id, name, url, fallback string) tea.Cmd {
+	return func() tea.Msg {
+		s, err := subs.Edit(id, name, url)
+		if err != nil {
+			return OpDoneMsg{Op: "sub-edit", Label: fallback, Err: err}
+		}
+		return OpDoneMsg{Op: "sub-edit", Label: s.Name}
 	}
 }
 

@@ -18,6 +18,8 @@ func DescribeError(err error) string {
 		return "Профиль не выбран. Перейди на вкладку Profiles и нажми enter"
 	case errors.Is(err, domain.ErrProfileNotFound):
 		return "Профиль не найден. Обнови список (r)"
+	case errors.Is(err, domain.ErrProfileManaged):
+		return "Профиль из подписки — редактируйте подписку на вкладке Subscriptions"
 	case errors.Is(err, domain.ErrSubscriptionNotFound):
 		return "Подписка не найдена. Обнови список (r)"
 	case errors.Is(err, domain.ErrCoreNotFound):

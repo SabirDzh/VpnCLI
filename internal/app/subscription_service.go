@@ -54,6 +54,25 @@ func (s *SubscriptionService) Remove(idOrName string) error {
 	return s.subs.DeleteSubscription(idOrName)
 }
 
+// Edit changes a subscription's name and/or URL. The ID stays stable so
+// profile source tags, counts and pruning keep working.
+func (s *SubscriptionService) Edit(idOrName, name, url string) (domain.Subscription, error) {
+	sub, err := s.subs.GetSubscription(idOrName)
+	if err != nil {
+		return domain.Subscription{}, err
+	}
+	if name != "" {
+		sub.Name = name
+	}
+	if url != "" {
+		sub.URL = url
+	}
+	if err := s.subs.SaveSubscription(sub); err != nil {
+		return domain.Subscription{}, err
+	}
+	return sub, nil
+}
+
 // Update fetches the subscription and upserts profiles by stable ID.
 // Profiles of this source missing from the remote are deleted.
 func (s *SubscriptionService) Update(idOrName string) (int, error) {

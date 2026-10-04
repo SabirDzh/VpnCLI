@@ -63,6 +63,48 @@ func (s *ProfileService) List() ([]domain.Profile, error) { return s.store.ListP
 // Remove deletes a profile.
 func (s *ProfileService) Remove(idOrName string) error { return s.store.DeleteProfile(idOrName) }
 
+// Edit renames a manual profile and optionally replaces it from a new URI.
+// An empty name keeps the current one; an empty URI keeps the parsed
+// settings. The active selection follows a replaced id.
+func (s *ProfileService) Edit(idOrName, name, uriStr string) (domain.Profile, error) {
+	old, err := s.store.GetProfile(idOrName)
+	if err != nil {
+		return domain.Profile{}, err
+	}
+	if old.Source != domain.ManualSource {
+		return domain.Profile{}, fmt.Errorf("%w: %s", domain.ErrProfileManaged, old.Name)
+	}
+	p := old
+	if uriStr != "" {
+		np, err := uri.Parse(uriStr)
+		if err != nil {
+			return domain.Profile{}, err
+		}
+		np.Source = domain.ManualSource
+		np.Name = old.Name
+		p = np
+	}
+	if name != "" {
+		p.Name = name
+	}
+	if err := s.store.SaveProfile(p); err != nil {
+		return domain.Profile{}, err
+	}
+	if p.ID != old.ID {
+		wasActive := false
+		if a, err := s.store.ActiveProfile(); err == nil && a.ID == old.ID {
+			wasActive = true
+		}
+		if err := s.store.DeleteProfile(old.ID); err != nil {
+			return domain.Profile{}, err
+		}
+		if _, err := s.store.SetActiveProfile(p.ID); wasActive && err != nil {
+			return domain.Profile{}, err
+		}
+	}
+	return p, nil
+}
+
 // Use selects the active profile.
 func (s *ProfileService) Use(idOrName string) (domain.Profile, error) {
 	return s.store.SetActiveProfile(idOrName)

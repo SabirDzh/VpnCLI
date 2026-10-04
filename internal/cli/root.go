@@ -14,15 +14,18 @@ import (
 
 // Deps are wired in main.go (composition root).
 type Deps struct {
-	Config  config.Config
-	Paths   platform.Paths
-	Store   *storage.Store
-	Reg     *core.Registry
-	Profile *app.ProfileService
-	Sub     *app.SubscriptionService
-	Conn    *app.ConnectionService
-	Update  *app.UpdateService
-	Version string
+	Config      config.Config
+	ConfigPath  string
+	Paths       platform.Paths
+	Store       *storage.Store
+	Reg         *core.Registry
+	Profile     *app.ProfileService
+	Sub         *app.SubscriptionService
+	Conn        *app.ConnectionService
+	Update      *app.UpdateService
+	SettingsSvc *app.SettingsService
+	Version     string
+	Repo        string
 }
 
 // NewRootCmd assembles all commands.

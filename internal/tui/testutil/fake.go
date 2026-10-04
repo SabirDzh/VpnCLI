@@ -55,10 +55,19 @@ type FakeProfiles struct {
 	AddErr    error
 	UseErr    error
 	RemoveErr error
+	EditErr   error
 
 	Used    []string
 	Removed []string
 	Added   []string
+	Edited  []EditCall
+}
+
+// EditCall records one Edit call; Value is the URI (profiles) or URL (subscriptions).
+type EditCall struct {
+	ID    string
+	Name  string
+	Value string
 }
 
 // List implements shared.FakeProfiles.
@@ -108,6 +117,15 @@ func (f *FakeProfiles) Remove(id string) error {
 	return f.RemoveErr
 }
 
+// Edit implements shared.ProfileAPI.
+func (f *FakeProfiles) Edit(idOrName, name, uri string) (domain.Profile, error) {
+	if f.EditErr != nil {
+		return domain.Profile{}, f.EditErr
+	}
+	f.Edited = append(f.Edited, EditCall{ID: idOrName, Name: name, Value: uri})
+	return domain.Profile{ID: idOrName, Name: name}, nil
+}
+
 // FakeSubs is an in-memory shared.SubscriptionAPI.
 type FakeSubs struct {
 	Items     []domain.Subscription
@@ -115,10 +133,12 @@ type FakeSubs struct {
 	UpdateErr error
 	UpdateN   int
 	AddErr    error
+	EditErr   error
 
 	Updated []string
 	Removed []string
 	Added   [][2]string
+	Edited  []EditCall
 }
 
 // List implements shared.FakeSubs.
@@ -146,3 +166,46 @@ func (f *FakeSubs) Add(name, url string) (domain.Subscription, error) {
 	f.Added = append(f.Added, [2]string{name, url})
 	return sub, nil
 }
+
+// Edit implements shared.SubscriptionAPI.
+func (f *FakeSubs) Edit(idOrName, name, url string) (domain.Subscription, error) {
+	if f.EditErr != nil {
+		return domain.Subscription{}, f.EditErr
+	}
+	f.Edited = append(f.Edited, EditCall{ID: idOrName, Name: name, Value: url})
+	return domain.Subscription{ID: idOrName, Name: name, URL: url}, nil
+}
+
+// FakeUpdate is an in-memory shared.UpdateAPI.
+type FakeUpdate struct {
+	Res         app.CheckResult
+	CheckErr    error
+	UpdateErr   error
+	CheckCalls  int
+	UpdateCalls []string
+	CheckTime   time.Time
+	UpdatedTime time.Time
+}
+
+// Check implements shared.UpdateAPI.
+func (f *FakeUpdate) Check(context.Context) (app.CheckResult, error) {
+	f.CheckCalls++
+	f.CheckTime = time.Now()
+	return f.Res, f.CheckErr
+}
+
+// Update implements shared.UpdateAPI.
+func (f *FakeUpdate) Update(_ context.Context, tag string) error {
+	if f.UpdateErr != nil {
+		return f.UpdateErr
+	}
+	f.UpdateCalls = append(f.UpdateCalls, tag)
+	f.UpdatedTime = time.Now()
+	return nil
+}
+
+// LastCheck implements shared.UpdateAPI.
+func (f *FakeUpdate) LastCheck() time.Time { return f.CheckTime }
+
+// LastUpdated implements shared.UpdateAPI.
+func (f *FakeUpdate) LastUpdated() time.Time { return f.UpdatedTime }
