@@ -1,16 +1,13 @@
 package tui
 
-import "charm.land/bubbles/v2/key"
+import (
+	"charm.land/bubbles/v2/key"
 
-// Key bindings shared by the root model. Screens expose their own
-// action bindings via Keys() for the footer.
-var (
-	keyQuit = key.NewBinding(
-		key.WithKeys("q", "ctrl+c"),
-		key.WithHelp("q", "quit (VPN stays on)"),
-	)
-	keyHelp = key.NewBinding(
-		key.WithKeys("?"),
-		key.WithHelp("?", "help"),
-	)
+	"github.com/SabirDzh/VpnCLI/internal/tui/theme"
 )
+
+// keyHint renders one footer hint: bold key plus dim description.
+func keyHint(b key.Binding, st theme.Styles) string {
+	h := b.Help()
+	return st.Key.Render(h.Key) + " " + st.Help.Render(h.Desc)
+}

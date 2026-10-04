@@ -63,11 +63,15 @@ func (d profileDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	}
 	mark := "  "
 	if p.active {
-		mark = "* "
+		mark = d.styles.ActiveMark.Render("* ")
 	}
-	row := fmt.Sprintf("%s%-24s %-10s %s", mark, p.name, p.protocol, shortSource(p.source))
+	row := fmt.Sprintf("%s%-20s %s  %s",
+		mark, p.name,
+		d.styles.ProtoBadge(strings.ToUpper(p.protocol)),
+		d.styles.Dim.Render(shortSource(p.source)),
+	)
 	if index == m.Index() {
-		row = d.styles.TabActive.Render(row)
+		row = d.styles.SelectedRow.Render(row)
 	}
 	fmt.Fprint(w, row)
 }

@@ -173,27 +173,33 @@ func (m *Model) View(width, height int) string {
 	var b strings.Builder
 	switch {
 	case m.busy:
-		fmt.Fprintf(&b, "%s %s…\n\n", m.spin.View(), m.busyOp)
+		fmt.Fprintf(&b, "%s %s…\n", m.spin.View(), m.busyOp)
+		b.WriteString(m.styles.Dim.Render("операция выполняется, подожди") + "\n")
 	case m.st.running:
-		fmt.Fprintf(&b, "%s connected\n\n", m.styles.OK.Render("●"))
+		b.WriteString(m.styles.OK.Bold(true).Render("● connected") + "\n")
 	default:
-		fmt.Fprintf(&b, "%s disconnected\n\n", m.styles.Dim.Render("○"))
+		b.WriteString(m.styles.Dim.Render("○ disconnected") + "\n")
 	}
+	b.WriteString("\n")
 	if m.st.running {
-		fmt.Fprintf(&b, "profile:  %s\n", m.st.name)
-		fmt.Fprintf(&b, "core:     %s (pid %d)\n", m.st.core, m.st.pid)
+		row := func(label, value string) {
+			b.WriteString(m.styles.Label.Render(label) + m.styles.Value.Render(value) + "\n")
+		}
+		row("profile", m.st.name)
+		row("core", fmt.Sprintf("%s · pid %d", m.st.core, m.st.pid))
 		if !m.st.since.IsZero() {
-			fmt.Fprintf(&b, "uptime:   %s\n", time.Since(m.st.since).Round(time.Second))
+			row("uptime", time.Since(m.st.since).Round(time.Second).String())
 		}
 		if m.st.endpoint != "" {
-			fmt.Fprintf(&b, "endpoint: %s\n", m.st.endpoint)
+			row("endpoint", m.st.endpoint)
 		}
+		b.WriteString("\n")
 	}
 	if m.errText != "" {
-		fmt.Fprintf(&b, "\n%s\n", m.styles.Err.Render(m.errText))
+		b.WriteString(m.styles.Err.Render("! "+m.errText) + "\n\n")
 	}
 	if t := m.toast.View(); t != "" {
-		b.WriteString("\n" + t + "\n")
+		b.WriteString(t + "\n")
 	}
 	return b.String()
 }

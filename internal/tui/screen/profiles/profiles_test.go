@@ -186,3 +186,14 @@ func keyPressNamed(s string) tea.Msg {
 		return kf(s)
 	}
 }
+
+func TestBadgesRendered(t *testing.T) {
+	m, _, _ := testModel()
+	ns, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	out := ns.(*Model).View(80, 20)
+	for _, want := range []string{"[VLESS]", "[TROJAN]"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("must render badge %s in:\n%s", want, out)
+		}
+	}
+}

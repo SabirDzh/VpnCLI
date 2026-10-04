@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/tui/screen/profiles"
@@ -143,7 +142,7 @@ func (m *Model) header() string {
 			tabs = append(tabs, m.styles.Tab.Render(label))
 		}
 	}
-	head := m.styles.Title.Render("vpn") + "  " + strings.Join(tabs, " ")
+	head := m.styles.HeaderBar.Render(" vpn ") + "  " + strings.Join(tabs, " ")
 	if m.deps.ReadOnly {
 		head += "  " + m.styles.Banner.Render("[read-only: без root]")
 	}
@@ -164,10 +163,11 @@ func (m *Model) footer() string {
 	}
 	var parts []string
 	for _, b := range m.screens[m.active].Keys() {
-		parts = append(parts, hint(b))
+		parts = append(parts, keyHint(b, m.styles))
 	}
-	parts = append(parts, hint(keyQuit), hint(keyHelp))
-	foot := m.styles.Help.Render(strings.Join(parts, "  "))
+	parts = append(parts, m.styles.Key.Render("q")+" "+m.styles.Help.Render("quit (VPN stays on)"))
+	parts = append(parts, m.styles.Key.Render("?")+" "+m.styles.Help.Render("help"))
+	foot := strings.Join(parts, "  ")
 	foot += "\n" + m.styles.Dim.Render("Выход из TUI не выключает VPN")
 	return foot
 }
@@ -190,9 +190,4 @@ func (m *Model) fullHelp() string {
 		b.WriteString(m.styles.Help.Render(r[0]) + "  " + r[1] + "\n")
 	}
 	return b.String()
-}
-
-func hint(b key.Binding) string {
-	h := b.Help()
-	return h.Key + " " + h.Desc
 }

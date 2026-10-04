@@ -157,22 +157,30 @@ func (m *Model) View(_, _ int) string {
 	}
 	if len(m.list) == 0 {
 		b.WriteString(m.styles.Dim.Render("Нет подписок. Добавь через: vpn sub add <имя> <url>") + "\n")
+	} else {
+		b.WriteString(m.styles.Dim.Render(fmt.Sprintf("%-22s %10s  %s", "NAME", "PROFILES", "UPDATED")) + "\n")
 	}
 	for i, s := range m.list {
 		cursor := "  "
 		if i == m.cursor {
-			cursor = m.styles.TabActive.Render("> ")
+			cursor = m.styles.ActiveMark.Render("> ")
 		}
 		name := s.Name
 		if m.busy && (m.busyID == "" || m.busyID == s.ID) {
 			name += " " + m.spin.View()
 		}
-		updated := "never"
+		if len(name) > 20 {
+			name = name[:19] + "…"
+		}
+		updated := m.styles.Dim.Render("never")
 		if !s.LastUpdated.IsZero() {
 			updated = s.LastUpdated.Format("02.01 15:04")
 		}
-		fmt.Fprintf(&b, "%s%-20s %3d profiles  upd %s\n",
-			cursor, name, m.counts[domain.SubscriptionSource(s.ID)], updated)
+		row := fmt.Sprintf("%s%-20s %3d profiles  %s", cursor, name, m.counts[domain.SubscriptionSource(s.ID)], updated)
+		if i == m.cursor {
+			row = m.styles.SelectedRow.Render(row)
+		}
+		b.WriteString(row + "\n")
 	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render(m.errText) + "\n")
