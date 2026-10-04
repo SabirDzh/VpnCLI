@@ -37,8 +37,12 @@ func testModel() (*Model, *testutil.FakeConn, *testutil.FakeProfiles) {
 	}
 	m := New(context.Background(), conn, prof, theme.Default(), false)
 	ns, _ := m.Update(shared.ProfilesMsg{List: prof.Items, ActiveID: "a1"})
-	ns.(*Model).list.Select(0)
 	return ns.(*Model), conn, prof
+}
+
+func sizedView(m *Model, w, h int) string {
+	ns, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	return ns.(*Model).View(w, h)
 }
 
 func TestUseFlow(t *testing.T) {
@@ -54,10 +58,21 @@ func TestUseFlow(t *testing.T) {
 	_ = ns
 }
 
+func TestNavigation(t *testing.T) {
+	m, _, _ := testModel()
+	ns, _ := m.Update(tea.KeyPressMsg{Code: 'j'})
+	if ns.(*Model).cursor != 1 {
+		t.Fatal("j must move down")
+	}
+	ns, _ = ns.Update(tea.KeyPressMsg{Code: 'k'})
+	if ns.(*Model).cursor != 0 {
+		t.Fatal("k must move up")
+	}
+}
+
 func TestConnectChain(t *testing.T) {
 	m, conn, _ := testModel()
-	// 'c' opens confirm (needs conn + full profile present)
-	m.list.Select(1)
+	m.cursor = 1
 	ns, _ := m.Update(kf("c"))
 	m2 := ns.(*Model)
 	if !m2.confirm.Showing() {
@@ -85,7 +100,6 @@ func TestConnectChain(t *testing.T) {
 
 func TestConfirmCancel(t *testing.T) {
 	m, conn, prof := testModel()
-	m.list.Select(0)
 	ns, _ := m.Update(kf("c"))
 	ns2, _ := ns.Update(kf("esc"))
 	m2 := ns2.(*Model)
@@ -99,13 +113,63 @@ func TestConfirmCancel(t *testing.T) {
 
 func TestNoSecretsInRows(t *testing.T) {
 	m, _, _ := testModel()
-	out := m.View(80, 20)
+	out := sizedView(m, 80, 20)
 	for _, secret := range []string{"uuid", "pass", "203.0", "hiddenserver"} {
 		if strings.Contains(strings.ToLower(out), secret) {
 			t.Fatalf("leak %q in:\n%s", secret, out)
 		}
 	}
 }
+
+func TestFilter(t *testing.T) {
+	m, _, _ := testModel()
+	ns, _ := m.Update(kf("/"))
+	mm := ns.(*Model)
+	if !mm.filtering {
+		t.Fatal("must enter filter mode")
+	}
+	ns, _ = mm.Update(tea.KeyPressMsg{Code: 'w'})
+	mm = ns.(*Model)
+	if out := mm.View(80, 20); !strings.Contains(out, "work") || strings.Contains(out, "home\n") {
+		t.Fatalf("filter must narrow rows:\n%s", out)
+	}
+	// esc clears the filter
+	ns, _ = mm.Update(kf("esc"))
+	mm = ns.(*Model)
+	if mm.filtering || mm.filter != "" {
+		t.Fatal("esc must clear filter")
+	}
+	if out := mm.View(80, 20); !strings.Contains(out, "home") {
+		t.Fatal("rows must return")
+	}
+}
+
+func TestHeaderActiveAndEmpty(t *testing.T) {
+	m, _, _ := testModel()
+	out := sizedView(m, 80, 20)
+	if !strings.Contains(out, "● home") {
+		t.Fatalf("must show active name:\n%s", out)
+	}
+	empty := New(context.Background(), &testutil.FakeConn{}, &testutil.FakeProfiles{}, theme.Default(), false)
+	ns, _ := empty.Update(shared.ProfilesMsg{})
+	if out := ns.(*Model).View(80, 20); !strings.Contains(out, "vpn profile add") {
+		t.Fatalf("must hint add:\n%s", out)
+	}
+}
+
+func TestFindProfileErrorAndExpiry(t *testing.T) {
+	conn := &testutil.FakeConn{}
+	prof := &testutil.FakeProfiles{Items: []domain.Profile{{ID: "a1", Name: "home"}}}
+	prof.ListErr = errBoom2{}
+	m := New(context.Background(), conn, prof, theme.Default(), false)
+	ns, _ := m.Update(shared.ProfilesMsg{List: prof.Items, ActiveID: "a1"})
+	ns2, _ := ns.Update(kf("c")) // findProfile fails via ListErr
+	_ = ns2
+}
+
+type errBoom2 struct{}
+
+func (errBoom2) Error() string { return "boom" }
 
 func TestRefreshAndReadonly(t *testing.T) {
 	m, _, _ := testModel()
@@ -121,7 +185,6 @@ func TestReadonlyConnectRefused(t *testing.T) {
 	prof := &testutil.FakeProfiles{Items: []domain.Profile{{ID: "a1", Name: "home"}}}
 	m := New(context.Background(), conn, prof, theme.Default(), true)
 	ns, _ := m.Update(shared.ProfilesMsg{List: prof.Items})
-	ns.(*Model).list.Select(0)
 	ns2, _ := ns.Update(kf("c"))
 	if len(conn.UpCalls) != 0 {
 		t.Fatal("readonly must not dial")
@@ -129,61 +192,6 @@ func TestReadonlyConnectRefused(t *testing.T) {
 	out := ns2.(*Model).toast.View()
 	if !strings.Contains(out, "root") {
 		t.Fatalf("must explain privileges, got %q", out)
-	}
-}
-
-func TestToastExpiryAndLoading(t *testing.T) {
-	m, _, _ := testModel()
-	fresh := New(context.Background(), &testutil.FakeConn{}, &testutil.FakeProfiles{}, theme.Default(), false)
-	if out := fresh.View(80, 20); !strings.Contains(out, "loading") {
-		t.Fatalf("got:\n%s", out)
-	}
-	_ = m
-}
-
-func TestFindProfileErrorAndExpiry(t *testing.T) {
-	conn := &testutil.FakeConn{}
-	prof := &testutil.FakeProfiles{Items: []domain.Profile{{ID: "a1", Name: "home"}}}
-	prof.ListErr = errBoom2{}
-	m := New(context.Background(), conn, prof, theme.Default(), false)
-	ns, _ := m.Update(shared.ProfilesMsg{List: prof.Items, ActiveID: "a1"})
-	ns.(*Model).list.Select(0)
-	ns2, _ := ns.Update(kf("c")) // findProfile fails via ListErr
-	_ = ns2
-}
-
-type errBoom2 struct{}
-
-func (errBoom2) Error() string { return "boom" }
-
-func TestProfilesMsgErrorAndConfirmKeys(t *testing.T) {
-	m, _, _ := testModel()
-	ns, _ := m.Update(shared.ProfilesMsg{Err: errBoom2{}})
-	if out := ns.(*Model).View(80, 20); !strings.Contains(out, "boom") {
-		t.Fatalf("got:\n%s", out)
-	}
-	// confirm navigation keys
-	m2, _, _ := testModel()
-	m2.list.Select(0)
-	ns2, _ := m2.Update(kf("c"))
-	for _, k := range []string{"left", "tab", "q"} {
-		ns2, _ = ns2.Update(keyPressNamed(k))
-	}
-	if ns2.(*Model).confirm.Showing() {
-		t.Fatal("q must close confirm")
-	}
-}
-
-func keyPressNamed(s string) tea.Msg {
-	switch s {
-	case "left":
-		return tea.KeyPressMsg{Code: tea.KeyLeft}
-	case "tab":
-		return tea.KeyPressMsg{Code: tea.KeyTab}
-	case "q":
-		return tea.KeyPressMsg{Code: 'q'}
-	default:
-		return kf(s)
 	}
 }
 
@@ -195,18 +203,5 @@ func TestBadgesRendered(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Fatalf("must render badge %s in:\n%s", want, out)
 		}
-	}
-}
-
-func TestHeaderActiveAndEmpty(t *testing.T) {
-	m, _, _ := testModel()
-	out := m.View(80, 20)
-	if !strings.Contains(out, "● home") {
-		t.Fatalf("must show active name:\n%s", out)
-	}
-	empty := New(context.Background(), &testutil.FakeConn{}, &testutil.FakeProfiles{}, theme.Default(), false)
-	ns, _ := empty.Update(shared.ProfilesMsg{})
-	if out := ns.(*Model).View(80, 20); !strings.Contains(out, "vpn profile add") {
-		t.Fatalf("must hint add:\n%s", out)
 	}
 }

@@ -1,16 +1,15 @@
-// Package profiles implements the Profiles tab: filterable profile list,
-// activation (enter), activation with connect (c, with reconnect confirm),
-// manual refresh (r). Secrets never reach the list rows.
+// Package profiles implements the Profiles tab: plain cursor list styled
+// like the main menu, activation (enter), activation with connect (c, with
+// reconnect confirm), manual refresh (r) and substring filter (/).
+// Secrets (UUID, passwords, hosts) never reach the list rows.
 package profiles
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
-	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
@@ -27,7 +26,7 @@ type Model struct {
 	readOnly bool
 	ctx      context.Context
 
-	list       list.Model
+	items      []domain.Profile
 	activeID   string
 	activeName string
 	loaded     bool
@@ -38,65 +37,19 @@ type Model struct {
 	confirm         component.Confirm
 	toast           component.Toast
 	pending         domain.Profile // connect target awaiting confirm verdict
+	cursor          int
+	offset          int
+	filter          string
+	filtering       bool
 	width           int
-}
-
-// profileItem is a list row without secrets (no UUID, password, host).
-type profileItem struct {
-	id       string
-	name     string
-	protocol string
-	source   string
-	active   bool
-}
-
-func (i profileItem) FilterValue() string { return i.name + " " + i.protocol }
-
-type profileDelegate struct{ styles theme.Styles }
-
-func (d profileDelegate) Height() int                         { return 1 }
-func (d profileDelegate) Spacing() int                        { return 0 }
-func (d profileDelegate) Update(tea.Msg, *list.Model) tea.Cmd { return nil }
-func (d profileDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
-	p, ok := item.(profileItem)
-	if !ok {
-		return
-	}
-	mark := "  "
-	if p.active {
-		mark = d.styles.ActiveMark.Render("* ")
-	}
-	row := fmt.Sprintf("%s%-20s %s  %s",
-		mark, p.name,
-		d.styles.ProtoBadge(strings.ToUpper(p.protocol)),
-		d.styles.Dim.Render(shortSource(p.source)),
-	)
-	if index == m.Index() {
-		row = d.styles.SelectedRow.Render(row)
-	}
-	fmt.Fprint(w, row)
-}
-
-func shortSource(s string) string {
-	if s == domain.ManualSource {
-		return "manual"
-	}
-	if strings.HasPrefix(s, "subscription:") {
-		return "sub:" + s[len("subscription:"):]
-	}
-	return s
+	height          int
 }
 
 // New creates the Profiles tab.
 func New(ctx context.Context, conn shared.ConnectionAPI, profiles shared.ProfileAPI, st theme.Styles, readOnly bool) *Model {
-	l := list.New(nil, profileDelegate{styles: st}, 0, 0)
-	l.Title = ""
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetShowTitle(false)
 	return &Model{
 		conn: conn, profiles: profiles, styles: st, readOnly: readOnly, ctx: ctx,
-		list: l, toast: component.NewToast(st), confirm: component.NewConfirm(st),
+		toast: component.NewToast(st), confirm: component.NewConfirm(st),
 	}
 }
 
@@ -116,6 +69,56 @@ func (m *Model) Keys() []key.Binding {
 // Init implements shared.Screen.
 func (m *Model) Init() tea.Cmd { return shared.FetchProfiles(m.profiles) }
 
+// filtered returns items matching the filter (name, protocol, source).
+func (m *Model) filtered() []domain.Profile {
+	if m.filter == "" {
+		return m.items
+	}
+	q := strings.ToLower(m.filter)
+	var out []domain.Profile
+	for _, p := range m.items {
+		hay := strings.ToLower(p.Name + " " + string(p.Protocol) + " " + p.Source)
+		if strings.Contains(hay, q) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (m *Model) clamp() {
+	n := len(m.filtered())
+	if n == 0 {
+		m.cursor, m.offset = 0, 0
+		return
+	}
+	if m.cursor >= n {
+		m.cursor = n - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	// keep cursor inside the visible window
+	win := m.winHeight()
+	if win < 1 {
+		win = 1
+	}
+	if m.cursor < m.offset {
+		m.offset = m.cursor
+	}
+	if m.cursor >= m.offset+win {
+		m.offset = m.cursor - win + 1
+	}
+}
+
+// winHeight is the row budget for the list.
+func (m *Model) winHeight() int {
+	h := m.height - 6 // title + hints + margins consumed by root chrome
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
 // Update implements shared.Screen.
 func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	if m.confirm.Showing() {
@@ -123,8 +126,8 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.list.SetSize(msg.Width, msg.Height-2)
+		m.width, m.height = msg.Width, msg.Height
+		m.clamp()
 		return m, nil
 	case shared.ProfilesMsg:
 		m.loaded = true
@@ -135,17 +138,14 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		m.errText = ""
 		m.activeID = msg.ActiveID
 		m.activeName = ""
-		items := make([]list.Item, 0, len(msg.List))
+		m.items = msg.List
 		for _, p := range msg.List {
 			if p.ID == msg.ActiveID {
 				m.activeName = p.Name
 			}
-			items = append(items, profileItem{
-				id: p.ID, name: p.Name, protocol: string(p.Protocol),
-				source: p.Source, active: p.ID == msg.ActiveID,
-			})
 		}
-		return m, m.list.SetItems(items)
+		m.clamp()
+		return m, nil
 	case shared.OpDoneMsg:
 		if msg.Err != nil {
 			m.busy = false
@@ -179,18 +179,28 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	case tea.KeyPressMsg:
 		return m.onKey(msg.String())
 	}
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
-func (m *Model) selected() (profileItem, bool) {
-	it, ok := m.list.SelectedItem().(profileItem)
-	return it, ok && m.loaded
+func (m *Model) selected() (domain.Profile, bool) {
+	items := m.filtered()
+	if !m.loaded || m.cursor < 0 || m.cursor >= len(items) {
+		return domain.Profile{}, false
+	}
+	return items[m.cursor], true
 }
 
 func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
+	if m.filtering {
+		return m.filterKey(k)
+	}
 	switch k {
+	case "up", "k":
+		m.moveCursor(-1)
+		return m, nil
+	case "down", "j":
+		m.moveCursor(1)
+		return m, nil
 	case "r":
 		if m.busy {
 			return m, nil
@@ -202,7 +212,7 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, nil
 		}
 		m.busy = true
-		return m, shared.DoUse(m.profiles, it.id, it.name)
+		return m, shared.DoUse(m.profiles, it.ID, it.Name)
 	case "c":
 		it, ok := m.selected()
 		if !ok || m.busy {
@@ -211,15 +221,48 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		if m.readOnly {
 			return m, m.showToast(shared.DescribeError(domain.ErrNotPrivileged), false)
 		}
-		p, err := m.findProfile(it.id)
+		p, err := m.findProfile(it.ID)
 		if err != nil {
 			return m, m.showToast(shared.DescribeError(err), false)
 		}
 		m.pending = p
-		m.confirm.Ask(fmt.Sprintf("Подключить %s?", it.name), "connect")
+		m.confirm.Ask(fmt.Sprintf("Подключить %s?", it.Name), "connect")
+		return m, nil
+	case "/":
+		if m.busy {
+			return m, nil
+		}
+		m.filtering = true
 		return m, nil
 	case "esc":
 		return m, shared.Back()
+	}
+	return m, nil
+}
+
+// filterKey handles keystrokes while the filter is open.
+func (m *Model) filterKey(k string) (shared.Screen, tea.Cmd) {
+	switch k {
+	case "esc":
+		m.filtering = false
+		m.filter = ""
+		m.clamp()
+	case "enter":
+		m.filtering = false
+		m.clamp()
+	case "backspace":
+		r := []rune(m.filter)
+		if len(r) > 0 {
+			m.filter = string(r[:len(r)-1])
+		}
+		m.clamp()
+	default:
+		if len(k) == 1 {
+			m.filter += k
+			m.cursor = 0
+			m.offset = 0
+			m.clamp()
+		}
 	}
 	return m, nil
 }
@@ -263,6 +306,11 @@ func (m *Model) updateConfirm(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) moveCursor(d int) {
+	m.cursor += d
+	m.clamp()
+}
+
 func (m *Model) showToast(text string, ok bool) tea.Cmd {
 	return m.toast.Show(text, ok, func(id int) tea.Msg {
 		return shared.ToastExpiredMsg{ID: id}
@@ -272,21 +320,43 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 // View implements shared.Screen.
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
-	b.WriteString(m.styles.Title.Render("Profiles") + m.styles.Dim.Render(fmt.Sprintf(" (%d)", len(m.list.Items()))))
+	b.WriteString(m.styles.Title.Render("Profiles") + m.styles.Dim.Render(fmt.Sprintf(" (%d)", len(m.items))))
 	if m.activeName != "" {
 		b.WriteString("  " + m.styles.ActiveMark.Render("● "+m.activeName))
 	}
-	b.WriteString("\n")
-	b.WriteString(m.styles.Dim.Render("enter — выбрать · c — выбрать и подключить · / — фильтр") + "\n\n")
-	// Size the list from the allocated space: title + hint + blank above.
-	m.list.SetSize(width, max(1, height-3))
-	switch {
-	case !m.loaded:
+	b.WriteString("\n\n")
+	if !m.loaded {
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
-	case len(m.list.Items()) == 0:
+	} else if len(m.items) == 0 {
 		b.WriteString(m.styles.Dim.Render("Нет профилей. Добавь через: vpn profile add <uri>") + "\n")
-	default:
-		b.WriteString(shared.IndentLines(m.list.View(), " ") + "\n")
+	} else {
+		items := m.filtered()
+		if len(items) == 0 {
+			b.WriteString(m.styles.Dim.Render("Ничего не найдено — esc сбрасывает фильтр") + "\n")
+		}
+		end := m.offset + m.winHeight()
+		if end > len(items) {
+			end = len(items)
+		}
+		for i := m.offset; i < end; i++ {
+			p := items[i]
+			mark := "  "
+			if p.ID == m.activeID {
+				mark = m.styles.ActiveMark.Render("* ")
+			}
+			row := fmt.Sprintf("%s%d. %-18s %s  %s",
+				mark, i+1, shared.Truncate(p.Name, 18),
+				m.styles.ProtoBadge(protoUpper(p.Protocol)),
+				m.styles.Dim.Render(shortSource(p.Source)),
+			)
+			if i == m.cursor {
+				row = m.styles.SelectedRow.Render(row)
+			}
+			b.WriteString(row + "\n")
+		}
+	}
+	if m.filtering || m.filter != "" {
+		b.WriteString(m.styles.Dim.Render("filter: "+m.filter+"▌") + "\n")
 	}
 	if m.errText != "" {
 		b.WriteString(m.styles.Err.Render(m.errText) + "\n")
@@ -297,5 +367,20 @@ func (m *Model) View(width, height int) string {
 	if m.confirm.Showing() {
 		b.WriteString("\n" + m.confirm.View(width))
 	}
+	_ = height
 	return shared.IndentLines(b.String(), " ")
+}
+
+func protoUpper(p domain.Protocol) string {
+	return strings.ToUpper(string(p))
+}
+
+func shortSource(s string) string {
+	if s == domain.ManualSource {
+		return "manual"
+	}
+	if strings.HasPrefix(s, "subscription:") {
+		return "sub:" + s[len("subscription:"):]
+	}
+	return s
 }
