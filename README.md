@@ -103,6 +103,9 @@ mixed_port: 10808
 features:
   adblock: false        # блокировка рекламы (DNS-уровень, geosite-ads)
   trackerblock: false   # блокировка трекеров (geosite-public-tracker)
+  socialblock: false    # блокировка соцсетей (geosite-social-media)
+  kill_switch: false    # pf-kill switch (macOS): без VPN трафик наружу закрыт; требует tun.enabled
+  appfirewall: []       # запрет приложений через VPN: [torrent-client, Steam] (по имени процесса)
   split_exclude: []     # домены/CIDR напрямую мимо VPN: [bank.example, 192.168.0.0/16]
   split_include: []     # только это через VPN, остальное напрямую (непустой меняет final на direct)
 update:
@@ -111,6 +114,16 @@ update:
 
 `features` и `update.auto` можно менять прямо в TUI (Settings и Other):
 изменения сохраняются в конфиг и применяются при следующем подключении.
+
+Границы DNS-блокировки: реклама **на сайтах** (баннеры, трекеры,
+домены рекламных сетей) блокируется, но реклама **внутри видео** (YouTube
+и подобные) — нет: ролики рекламы отдаются с тех же доменов, что и само
+видео (googlevideo.com), и на уровне DNS/route их не отделить. Для этого
+нужен MITM-прокси с собственным CA — вне рамок этого инструмента.
+
+Kill switch (macOS, pf): при `up` ставится якорь, пропускающий только
+туннель (`utun*`/`tun*`), локальные сети, DHCP и адрес VPN-сервера —
+если VPN падает, интернет обрывается вместе с ним. Требует `tun.enabled`.
 
 ## TUI
 
@@ -135,7 +148,7 @@ sudo vpn tui
 | `a` | добавить профиль / подписку |
 | `e` | редактировать профиль / подписку |
 | `x` | удалить выбранное (с подтверждением) |
-| `enter/space` (Settings) | переключить блокировку, править split-списки |
+| `enter/space` (Settings) | переключить блокировку / kill switch, править app firewall и split-списки |
 | `c` (Other) | проверить обновления |
 | `U` (Other) | установить обновление |
 | `a` (Other) | автообновление вкл/выкл |
