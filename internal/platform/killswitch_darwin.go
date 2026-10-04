@@ -24,7 +24,7 @@ func KillSwitchRules() string {
 	return `set skip on lo0
 block drop all
 pass on { utun+ tun+ } keep state
-pass to { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, ff00::/8 }
+pass to { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 224.0.0.0/4, ff00::/8, fc00::/7, fe80::/7 }
 pass out udp proto udp to port { 67, 68 }
 `
 }

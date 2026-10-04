@@ -7,7 +7,7 @@ import (
 
 func TestKillSwitchRulesContent(t *testing.T) {
 	rules := KillSwitchRules()
-	for _, want := range []string{"set skip on lo0", "block drop all", "pass on { utun+ tun+ }", "192.168.0.0/16", "port { 67, 68 }"} {
+	for _, want := range []string{"set skip on lo0", "block drop all", "pass on { utun+ tun+ }", "192.168.0.0/16", "port { 67, 68 }", "fc00::/7", "fe80::/7"} {
 		if !strings.Contains(rules, want) {
 			t.Fatalf("rules missing %q:\n%s", want, rules)
 		}
