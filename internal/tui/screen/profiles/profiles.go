@@ -159,10 +159,7 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 				return m, shared.DoUp(m.ctx, m.conn, m.pending.ID, m.pending.Name)
 			}
 			m.busy = false
-			return m, tea.Batch(
-				m.showToast("Активен: "+msg.Label, true),
-				shared.FetchProfiles(m.profiles),
-			)
+			return m, shared.FetchProfiles(m.profiles)
 		case "up":
 			m.busy = false
 			return m, tea.Batch(
