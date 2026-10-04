@@ -73,3 +73,19 @@ func TestScrollAndBack(t *testing.T) {
 		t.Fatal("no init fetch")
 	}
 }
+
+func TestScrollOverflowNoPanic(t *testing.T) {
+	m := New(testInfo(), theme.Default())
+	down := tea.KeyPressMsg{Code: 'j'}
+	ns := shared.Screen(m)
+	for i := 0; i < 100; i++ {
+		ns, _ = ns.Update(down)
+	}
+	// render at tiny height with maxed offset must not panic
+	_ = ns.View(80, 5)
+	up := tea.KeyPressMsg{Code: 'k'}
+	for i := 0; i < 100; i++ {
+		ns, _ = ns.Update(up)
+	}
+	_ = ns.View(80, 30)
+}

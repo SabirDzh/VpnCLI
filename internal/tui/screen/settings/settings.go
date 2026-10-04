@@ -105,7 +105,9 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 				m.offset--
 			}
 		case "down", "j":
-			m.offset++
+			if m.offset < len(m.rows)-1 {
+				m.offset++
+			}
 		case "esc":
 			return m, shared.Back()
 		}
@@ -117,6 +119,9 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 func (m *Model) View(width, height int) string {
 	var b strings.Builder
 	b.WriteString(m.styles.Title.Render("Settings") + "\n\n")
+	if m.offset >= len(m.rows) {
+		m.offset = max(0, len(m.rows)-1)
+	}
 	visible := m.rows[m.offset:]
 	maxRows := height - 4
 	if maxRows < 1 {
