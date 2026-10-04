@@ -25,8 +25,14 @@ type Options struct {
 	TrackerBlock bool
 	SocialBlock  bool
 	AppFirewall  []string
-	SplitExclude []string
-	SplitInclude []string
+	// SplitMode: exclude|include|off ("" = legacy dual-list behavior).
+	SplitMode        string
+	SplitExclude     []string
+	SplitInclude     []string
+	SplitExcludeApps []string
+	SplitIncludeApps []string
+	// Multiplex: off|on|auto ("" = off for the builder).
+	Multiplex string
 	// DNS servers and strategy (guard: resolved via proxy).
 	DNSServers  []string
 	DNSStrategy string

@@ -374,6 +374,89 @@ func TestNoBlocklistsByDefault(t *testing.T) {
 	}
 }
 
+func TestSplitExcludeModeWithApps(t *testing.T) {
+	var b Builder
+	opts := testOpts()
+	opts.SplitMode = "exclude"
+	opts.SplitExclude = []string{"bank.example"}
+	opts.SplitExcludeApps = []string{"Госуслуги"}
+	got, err := b.Build(testTrojan(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	json.Unmarshal(got, &cfg)
+	route := cfg["route"].(map[string]any)
+	if route["final"] != "proxy" {
+		t.Fatalf("final: %v", route["final"])
+	}
+	var appRule, domRule bool
+	for _, r := range route["rules"].([]any) {
+		m := r.(map[string]any)
+		if procs, ok := m["process_name"].([]any); ok {
+			if procs[0] == "Госуслуги" && m["outbound"] == "direct" && m["action"] == "route" {
+				appRule = true
+			}
+		}
+		if doms, ok := m["domain_suffix"].([]any); ok && len(doms) > 0 && doms[0] == "bank.example" && m["outbound"] == "direct" {
+			domRule = true
+		}
+	}
+	if !appRule || !domRule {
+		t.Fatalf("app=%v dom=%v", appRule, domRule)
+	}
+}
+
+func TestSplitIncludeModeWithApps(t *testing.T) {
+	var b Builder
+	opts := testOpts()
+	opts.SplitMode = "include"
+	opts.SplitInclude = []string{"work.example"}
+	opts.SplitIncludeApps = []string{"Miro"}
+	got, err := b.Build(testTrojan(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	json.Unmarshal(got, &cfg)
+	route := cfg["route"].(map[string]any)
+	if route["final"] != "direct" {
+		t.Fatalf("include mode must flip final: %v", route["final"])
+	}
+	var appRule, domRule bool
+	for _, r := range route["rules"].([]any) {
+		m := r.(map[string]any)
+		if procs, ok := m["process_name"].([]any); ok && procs[0] == "Miro" && m["outbound"] == "proxy" {
+			appRule = true
+		}
+		if doms, ok := m["domain_suffix"].([]any); ok && len(doms) > 0 && doms[0] == "work.example" && m["outbound"] == "proxy" {
+			domRule = true
+		}
+	}
+	if !appRule || !domRule {
+		t.Fatalf("app=%v dom=%v", appRule, domRule)
+	}
+}
+
+func TestSplitOffIgnoresLists(t *testing.T) {
+	var b Builder
+	opts := testOpts()
+	opts.SplitMode = "off"
+	opts.SplitExclude = []string{"bank.example"}
+	opts.SplitExcludeApps = []string{"Госуслуги"}
+	opts.SplitInclude = []string{"work.example"}
+	opts.SplitIncludeApps = []string{"Miro"}
+	got, err := b.Build(testTrojan(), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{"process_name", "bank.example", "work.example", "Miro"} {
+		if strings.Contains(string(got), banned) {
+			t.Fatalf("off mode must ignore lists, found %q:\n%s", banned, got)
+		}
+	}
+}
+
 func TestSplitExcludeRule(t *testing.T) {
 	rules, _, final := buildRouted(t, func(o *core.Options) {
 		o.SplitExclude = []string{"bank.example", "192.168.0.0/16"}

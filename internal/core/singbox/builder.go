@@ -31,6 +31,15 @@ var blocklistSets = []struct {
 }{}
 
 // splitRule splits tokens into domain_suffix (hosts) and ip_cidr (prefixes).
+// appRule routes traffic of the given process names to the outbound.
+func appRule(apps []string, outbound string) map[string]any {
+	procs := make([]any, len(apps))
+	for i, name := range apps {
+		procs[i] = name
+	}
+	return map[string]any{"process_name": procs, "action": "route", "outbound": outbound}
+}
+
 func splitRule(tokens []string, outbound string) map[string]any {
 	var domains, cidrs []any
 	for _, tok := range tokens {
@@ -95,14 +104,38 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		})
 		rules = append(rules, map[string]any{"rule_set": []any{set.tag}, "action": "reject"})
 	}
-	if len(opts.SplitExclude) > 0 {
-		rules = append(rules, splitRule(opts.SplitExclude, "direct"))
+	// Split mode: "" = legacy dual-list behavior (exclude→direct,
+	// include→proxy with final flip) kept for backward compatibility.
+	mode := opts.SplitMode
+	if mode == "" {
+		mode = "legacy"
 	}
-	if len(opts.SplitInclude) > 0 {
-		rules = append(rules, splitRule(opts.SplitInclude, "proxy"))
+	switch mode {
+	case "exclude":
+		if len(opts.SplitExcludeApps) > 0 {
+			rules = append(rules, appRule(opts.SplitExcludeApps, "direct"))
+		}
+		if len(opts.SplitExclude) > 0 {
+			rules = append(rules, splitRule(opts.SplitExclude, "direct"))
+		}
+	case "include":
+		if len(opts.SplitIncludeApps) > 0 {
+			rules = append(rules, appRule(opts.SplitIncludeApps, "proxy"))
+		}
+		if len(opts.SplitInclude) > 0 {
+			rules = append(rules, splitRule(opts.SplitInclude, "proxy"))
+		}
+	case "legacy":
+		if len(opts.SplitExclude) > 0 {
+			rules = append(rules, splitRule(opts.SplitExclude, "direct"))
+		}
+		if len(opts.SplitInclude) > 0 {
+			rules = append(rules, splitRule(opts.SplitInclude, "proxy"))
+		}
 	}
 	final := "proxy"
-	if len(opts.SplitInclude) > 0 {
+	if (mode == "include" || mode == "legacy") &&
+		(len(opts.SplitInclude) > 0 || len(opts.SplitIncludeApps) > 0) {
 		final = "direct"
 	}
 
