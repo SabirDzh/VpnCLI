@@ -20,6 +20,7 @@ type Styles struct {
 	Banner    lipgloss.Style
 
 	HeaderBar   lipgloss.Style
+	Logo        lipgloss.Style
 	SelectedRow lipgloss.Style
 	ActiveMark  lipgloss.Style
 	Key         lipgloss.Style
@@ -52,6 +53,7 @@ func Default() Styles {
 		ToastErr:    lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true),
 		Banner:      lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 		HeaderBar:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Padding(0, 1),
+		Logo:        lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")),
 		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8")).Padding(0, 1),
 		ActiveMark:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")),
 		Key:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),

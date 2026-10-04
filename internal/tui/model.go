@@ -123,7 +123,7 @@ func (m *Model) render() string {
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n")
-	body := m.screens[m.active].View(m.width, m.height-4)
+	body := m.screens[m.active].View(m.width, m.height-6)
 	b.WriteString(body)
 	if !strings.HasSuffix(body, "\n") {
 		b.WriteString("\n")
@@ -142,11 +142,25 @@ func (m *Model) header() string {
 			tabs = append(tabs, m.styles.Tab.Render(label))
 		}
 	}
-	head := m.styles.HeaderBar.Render(" vpn ") + "  " + strings.Join(tabs, " ")
+	banner := ""
 	if m.deps.ReadOnly {
-		head += "  " + m.styles.Banner.Render("[read-only: без root]")
+		banner = "  " + m.styles.Banner.Render("[read-only: без root]")
 	}
-	return head
+	logo := m.styles.Logo.Render(strings.Join(logoLines, "\n"))
+	logoRows := strings.Split(logo, "\n")
+	tabLine := strings.Join(tabs, " ")
+	var b strings.Builder
+	b.WriteString(logoRows[0] + "   " + tabLine + "\n")
+	b.WriteString(logoRows[1] + "\n")
+	b.WriteString(logoRows[2] + banner)
+	return b.String()
+}
+
+// logoLines is a compact ASCII logo rendered in the header.
+var logoLines = []string{
+	"█  █ ███  █  █",
+	"█  █ █  █ ██ █",
+	" ██  ███  █  █",
 }
 
 func tabKeyLabel(i int) string {
