@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/SabirDzh/VpnCLI/internal/core"
@@ -331,5 +332,72 @@ func TestSplitIncludeFlipsFinal(t *testing.T) {
 	}
 	if exIdx == -1 || incIdx == -1 || exIdx > incIdx {
 		t.Fatalf("exclude must precede include: %d, %d", exIdx, incIdx)
+	}
+}
+
+func TestSocialBlockRule(t *testing.T) {
+	rules, ruleSet, _ := buildRouted(t, func(o *core.Options) { o.SocialBlock = true })
+	if len(ruleSet) != 1 {
+		t.Fatalf("want 1 rule_set, got %d", len(ruleSet))
+	}
+	if ruleBySet(t, rules, "geosite-social")["action"] != "reject" {
+		t.Fatal("social rule must reject")
+	}
+}
+
+func TestAppFirewallRules(t *testing.T) {
+	// a process_name reject rule must lead the rule list
+	var b Builder
+	p := domain.Profile{
+		Protocol: domain.ProtocolTrojan,
+		Endpoint: domain.Endpoint{Host: "192.0.2.5", Port: 443},
+		Settings: domain.ProtocolSettings{Password: "x"},
+	}
+	opts := testOpts()
+	opts.AppFirewall = []string{"torrent", "Steam Helper"}
+	got, err := b.Build(p, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(got, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	route := cfg["route"].(map[string]any)
+	if _, present := route["find_process_mode"]; present {
+		t.Fatal("find_process_mode was removed in sing-box 1.14 and must not be emitted")
+	}
+	rules := route["rules"].([]any)
+	rejIdx := -1
+	for i, r := range rules {
+		m, ok := r.(map[string]any)
+		if !ok {
+			continue
+		}
+		if pn, ok := m["process_name"].([]any); ok && len(pn) == 2 && pn[0] == "torrent" && pn[1] == "Steam Helper" {
+			if m["action"] != "reject" {
+				t.Fatalf("app rule must reject: %v", m)
+			}
+			rejIdx = i
+		}
+	}
+	if rejIdx == -1 {
+		t.Fatal("process_name reject rule not found")
+	}
+}
+
+func TestNoAppFirewallByDefault(t *testing.T) {
+	var b Builder
+	p := domain.Profile{
+		Protocol: domain.ProtocolTrojan,
+		Endpoint: domain.Endpoint{Host: "192.0.2.5", Port: 443},
+		Settings: domain.ProtocolSettings{Password: "x"},
+	}
+	got, err := b.Build(p, testOpts())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "process_name") || strings.Contains(string(got), "find_process_mode") {
+		t.Fatalf("no process rules expected:\n%s", got)
 	}
 }

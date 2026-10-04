@@ -20,7 +20,15 @@ type Builder struct{}
 const (
 	adsRuleSetURL      = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-ads-all.srs"
 	trackersRuleSetURL = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-public-tracker.srs"
+	socialRuleSetURL   = "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-category-social-media-%21cn.srs"
 )
+
+// blocklistSets maps feature toggles to verified remote rule-sets.
+var blocklistSets = []struct {
+	flag bool
+	tag  string
+	url  string
+}{}
 
 // splitRule splits tokens into domain_suffix (hosts) and ip_cidr (prefixes).
 func splitRule(tokens []string, outbound string) map[string]any {
@@ -58,18 +66,31 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		map[string]any{"ip_is_private": true, "action": "route", "outbound": "direct"},
 	}
 	rules := baseRules
-	var ruleSet []any
-	if opts.Adblock {
-		ruleSet = append(ruleSet, map[string]any{
-			"tag": "geosite-ads", "type": "remote", "url": adsRuleSetURL, "download_detour": "direct",
-		})
-		rules = append(rules, map[string]any{"rule_set": []any{"geosite-ads"}, "action": "reject"})
+	if len(opts.AppFirewall) > 0 {
+		processes := make([]any, len(opts.AppFirewall))
+		for i, name := range opts.AppFirewall {
+			processes[i] = name
+		}
+		rules = append([]any{map[string]any{"process_name": processes, "action": "reject"}}, rules...)
 	}
-	if opts.TrackerBlock {
+	var ruleSet []any
+	sets := []struct {
+		on  bool
+		tag string
+		url string
+	}{
+		{opts.Adblock, "geosite-ads", adsRuleSetURL},
+		{opts.TrackerBlock, "geosite-trackers", trackersRuleSetURL},
+		{opts.SocialBlock, "geosite-social", socialRuleSetURL},
+	}
+	for _, set := range sets {
+		if !set.on {
+			continue
+		}
 		ruleSet = append(ruleSet, map[string]any{
-			"tag": "geosite-trackers", "type": "remote", "url": trackersRuleSetURL, "download_detour": "direct",
+			"tag": set.tag, "type": "remote", "url": set.url, "download_detour": "direct",
 		})
-		rules = append(rules, map[string]any{"rule_set": []any{"geosite-trackers"}, "action": "reject"})
+		rules = append(rules, map[string]any{"rule_set": []any{set.tag}, "action": "reject"})
 	}
 	if len(opts.SplitExclude) > 0 {
 		rules = append(rules, splitRule(opts.SplitExclude, "direct"))
@@ -88,6 +109,8 @@ func (Builder) Build(p domain.Profile, opts core.Options) ([]byte, error) {
 		"final":                   final,
 		"default_domain_resolver": map[string]any{"server": "local"},
 	}
+	// No find_process_mode: removed in sing-box 1.14, which enables
+	// process search automatically when a process rule exists.
 	if len(ruleSet) > 0 {
 		route["rule_set"] = ruleSet
 	}

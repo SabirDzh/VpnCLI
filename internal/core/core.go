@@ -23,6 +23,8 @@ type Options struct {
 	// Features applied by the config builder (see singbox.Builder).
 	Adblock      bool
 	TrackerBlock bool
+	SocialBlock  bool
+	AppFirewall  []string
 	SplitExclude []string
 	SplitInclude []string
 }
