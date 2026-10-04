@@ -49,6 +49,7 @@ func NewRootCmd(d Deps) *cobra.Command {
 		NewUpdateCmd(d),
 		NewTUICmd(d),
 		NewVersionCmd(d),
+		NewBenchCmd(d),
 	)
 	return root
 }
