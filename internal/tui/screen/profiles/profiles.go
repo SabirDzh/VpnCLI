@@ -278,11 +278,12 @@ func (m *Model) View(width, height int) string {
 	}
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("enter — выбрать · c — выбрать и подключить · / — фильтр") + "\n\n")
-	if !m.loaded {
+	switch {
+	case !m.loaded:
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
-	} else if len(m.list.Items()) == 0 {
+	case len(m.list.Items()) == 0:
 		b.WriteString(m.styles.Dim.Render("Нет профилей. Добавь через: vpn profile add <uri>") + "\n")
-	} else {
+	default:
 		b.WriteString(shared.IndentLines(m.list.View(), " ") + "\n")
 	}
 	if m.errText != "" {
