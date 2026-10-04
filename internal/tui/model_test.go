@@ -339,3 +339,25 @@ func TestNumberKeysOpenPages(t *testing.T) {
 		m = nm.(*Model)
 	}
 }
+
+func TestSettingsMenuEntry(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 26)
+	out := strip(m.render())
+	if !strings.Contains(out, "4. Settings") {
+		t.Fatalf("menu must list Settings:\n%s", out)
+	}
+	nm, cmd := m.Update(keyPress("4"))
+	m = nm.(*Model)
+	if m.page == nil || m.page.Title() != "Settings" {
+		t.Fatal("4 must open Settings")
+	}
+	if cmd != nil {
+		// settings has no init fetch; nil is fine, non-nil tolerated
+		_ = cmd()
+	}
+	nm, _ = m.Update(shared.BackMsg{})
+	if nm.(*Model).page != nil {
+		t.Fatal("must return to menu")
+	}
+}

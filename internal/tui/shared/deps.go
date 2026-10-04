@@ -17,7 +17,29 @@ type Deps struct {
 	Connection ConnectionAPI
 	Profiles   ProfileAPI
 	Subs       SubscriptionAPI
+	Settings   SettingsInfo
 	ReadOnly   bool
+}
+
+// SettingsInfo is a snapshot of the effective configuration and
+// environment, assembled once by the composition root.
+type SettingsInfo struct {
+	CoreDefault    string
+	SingBoxPath    string
+	SingBoxVersion string
+	SingBoxErr     string
+	MinVersion     string
+	LogLevel       string
+	TUNEnabled     bool
+	MTU            int
+	AutoRoute      bool
+	StrictRoute    bool
+	MixedPort      int
+	Privileged     bool
+	ConfigDir      string
+	DataDir        string
+	StateFile      string
+	LogFile        string
 }
 
 // ConnectionAPI is the subset of ConnectionService the TUI needs.

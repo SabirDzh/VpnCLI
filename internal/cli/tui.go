@@ -11,6 +11,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/SabirDzh/VpnCLI/internal/app"
+	"github.com/SabirDzh/VpnCLI/internal/core/singbox"
 	"github.com/SabirDzh/VpnCLI/internal/domain"
 	"github.com/SabirDzh/VpnCLI/internal/platform"
 	"github.com/SabirDzh/VpnCLI/internal/tui"
@@ -34,6 +35,7 @@ func NewTUICmd(d Deps) *cobra.Command {
 				Connection: connAdapter{svc: d.Conn},
 				Profiles:   profileAdapter{svc: d.Profile, store: d.Store},
 				Subs:       subAdapter{svc: d.Sub},
+				Settings:   buildSettingsInfo(d),
 				ReadOnly:   !platform.IsPrivileged(),
 			})
 		},
@@ -72,6 +74,34 @@ func (a profileAdapter) Remove(id string) error { return a.svc.Remove(id) }
 
 func (a profileAdapter) Active() (domain.Profile, error) {
 	return a.store.ActiveProfile()
+}
+
+// buildSettingsInfo snapshots the effective config and core state.
+func buildSettingsInfo(d Deps) shared.SettingsInfo {
+	info := shared.SettingsInfo{
+		CoreDefault: d.Config.Core.Default,
+		SingBoxPath: d.Config.Core.SingBox.Path,
+		MinVersion:  d.Config.Core.SingBox.MinVers,
+		LogLevel:    d.Config.Log.Level,
+		TUNEnabled:  d.Config.TUN.Enabled,
+		MTU:         d.Config.TUN.MTU,
+		AutoRoute:   d.Config.TUN.AutoRoute,
+		StrictRoute: d.Config.TUN.StrictRoute,
+		MixedPort:   d.Config.MixedPort,
+		Privileged:  platform.IsPrivileged(),
+		ConfigDir:   d.Paths.ConfigDir,
+		DataDir:     d.Paths.DataDir,
+		StateFile:   d.Paths.StateFile,
+		LogFile:     d.Paths.LogFile,
+	}
+	if bin, err := singbox.FindBinary(info.SingBoxPath); err != nil {
+		info.SingBoxErr = "not found in PATH"
+	} else if ver, err := singbox.BinaryVersion(bin); err != nil {
+		info.SingBoxErr = "version check failed"
+	} else {
+		info.SingBoxVersion = ver
+	}
+	return info
 }
 
 // subAdapter narrows SubscriptionService to shared.SubscriptionAPI.
