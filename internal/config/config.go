@@ -40,8 +40,11 @@ type Config struct {
 	Features struct {
 		Adblock      bool     `mapstructure:"adblock" yaml:"adblock"`
 		TrackerBlock bool     `mapstructure:"trackerblock" yaml:"trackerblock"`
+		SocialBlock  bool     `mapstructure:"socialblock" yaml:"socialblock"`
+		KillSwitch   bool     `mapstructure:"kill_switch" yaml:"kill_switch"`
 		SplitExclude []string `mapstructure:"split_exclude" yaml:"split_exclude"`
 		SplitInclude []string `mapstructure:"split_include" yaml:"split_include"`
+		AppFirewall  []string `mapstructure:"appfirewall" yaml:"appfirewall"`
 	} `mapstructure:"features" yaml:"features"`
 	// Update controls self-update behavior; auto applies on next launch.
 	Update struct {
@@ -125,11 +128,21 @@ func (c Config) Validate() error {
 	if c.TUN.MTU < 1280 || c.TUN.MTU > 9000 {
 		return fmt.Errorf("%w: tun.mtu out of range", domain.ErrInvalidConfig)
 	}
+	// The pf kill switch passes only the utun interface; without TUN it
+	// would sever sing-box's own uplink too.
+	if c.Features.KillSwitch && !c.TUN.Enabled {
+		return fmt.Errorf("%w: kill_switch requires tun.enabled", domain.ErrInvalidConfig)
+	}
 	for _, list := range [][]string{c.Features.SplitExclude, c.Features.SplitInclude} {
 		for _, tok := range list {
 			if err := validateSplitToken(tok); err != nil {
 				return err
 			}
+		}
+	}
+	for _, app := range c.Features.AppFirewall {
+		if app == "" || strings.ContainsAny(app, " \t/") {
+			return fmt.Errorf("%w: bad app name %q", domain.ErrInvalidConfig, app)
 		}
 	}
 	return nil
@@ -184,6 +197,9 @@ func Save(path string, c Config) error {
 	set("mixed_port", c.MixedPort)
 	set("features.adblock", c.Features.Adblock)
 	set("features.trackerblock", c.Features.TrackerBlock)
+	set("features.socialblock", c.Features.SocialBlock)
+	set("features.kill_switch", c.Features.KillSwitch)
+	set("features.appfirewall", c.Features.AppFirewall)
 	set("features.split_exclude", c.Features.SplitExclude)
 	set("features.split_include", c.Features.SplitInclude)
 	set("update.auto", c.Update.Auto)

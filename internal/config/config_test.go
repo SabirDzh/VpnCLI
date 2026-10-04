@@ -144,3 +144,62 @@ tun:
 		t.Fatalf("post-save load: %+v", c2)
 	}
 }
+
+func TestNewFeaturesRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/config.yaml"
+	src := `
+features:
+  socialblock: true
+  kill_switch: true
+  appfirewall:
+    - torrent-client
+    - Steam
+`
+	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Features.SocialBlock || !c.Features.KillSwitch {
+		t.Fatalf("flags: %+v", c.Features)
+	}
+	if len(c.Features.AppFirewall) != 2 || c.Features.AppFirewall[0] != "torrent-client" {
+		t.Fatalf("appfirewall: %+v", c.Features.AppFirewall)
+	}
+	if err := Save(path, c); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	for _, want := range []string{"socialblock: true", "kill_switch: true", "torrent-client"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("saved config missing %q:\n%s", want, raw)
+		}
+	}
+}
+
+func TestKillSwitchNeedsTUN(t *testing.T) {
+	c := Defaults()
+	c.Features.KillSwitch = true
+	c.TUN.Enabled = false
+	if err := c.Validate(); !errors.Is(err, domain.ErrInvalidConfig) {
+		t.Fatalf("expected invalid config, got %v", err)
+	}
+	c.TUN.Enabled = true
+	if err := c.Validate(); err != nil {
+		t.Fatalf("tun on must satisfy kill switch: %v", err)
+	}
+}
+
+func TestAppFirewallValidation(t *testing.T) {
+	dir := t.TempDir()
+	bad := dir + "/bad.yaml"
+	if err := os.WriteFile(bad, []byte("features:\n  appfirewall:\n    - \"bad name\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(bad, nil); !errors.Is(err, domain.ErrInvalidConfig) {
+		t.Fatalf("expected invalid config, got %v", err)
+	}
+}
