@@ -16,7 +16,7 @@ import (
 // Limits for the minimum usable window.
 const (
 	minWidth  = 60
-	minHeight = 15
+	minHeight = 20
 )
 
 // Model is the root TUI model: tabs, routing, global keys.
@@ -119,11 +119,11 @@ func (m *Model) render() string {
 	}
 	if m.width < minWidth || m.height < minHeight {
 		return m.styles.Warn.Render(
-			"Окно слишком маленькое. Увеличь до 60×15.") + "\n"
+			"Окно слишком маленькое. Увеличь до 60×20.") + "\n"
 	}
 	var b strings.Builder
 	b.WriteString(m.header() + "\n")
-	body := m.screens[m.active].View(m.width, m.height-6)
+	body := m.screens[m.active].View(m.width, m.height-12)
 	b.WriteString(body)
 	if !strings.HasSuffix(body, "\n") {
 		b.WriteString("\n")
@@ -151,16 +151,21 @@ func (m *Model) header() string {
 	tabLine := strings.Join(tabs, " ")
 	var b strings.Builder
 	b.WriteString(logoRows[0] + "   " + tabLine + "\n")
-	b.WriteString(logoRows[1] + "\n")
-	b.WriteString(logoRows[2] + banner)
+	b.WriteString(strings.Join(logoRows[1:], "\n") + banner)
 	return b.String()
 }
 
-// logoLines is a compact ASCII logo rendered in the header.
+// logoLines is the ASCII logo rendered in the header.
 var logoLines = []string{
-	"█  █ ███  █  █",
-	"█  █ █  █ ██ █",
-	" ██  ███  █  █",
+	`__     __  _______   __    __`,
+	`╱  │   ╱  │╱       ╲ ╱  ╲  ╱  │`,
+	`$$ │   $$ │$$$$$$$  │$$  ╲ $$ │`,
+	`$$ │   $$ │$$ │__$$ │$$$  ╲$$ │`,
+	`$$  ╲ ╱$$╱ $$    $$╱ $$$$  $$ │`,
+	` $$  ╱$$╱  $$$$$$$╱  $$ $$ $$ │`,
+	`  $$ $$╱   $$ │      $$ │$$$$ │`,
+	`   $$$╱    $$ │      $$ │ $$$ │`,
+	`    $╱     $$╱       $$╱   $$╱`,
 }
 
 func tabKeyLabel(i int) string {
