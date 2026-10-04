@@ -22,12 +22,19 @@ const (
 	ProtocolShadowsocks Protocol = "shadowsocks"
 	// ProtocolHysteria2 is Hysteria2 over QUIC.
 	ProtocolHysteria2 Protocol = "hysteria2"
+	// ProtocolTUIC is TUIC v5 over QUIC.
+	ProtocolTUIC Protocol = "tuic"
+	// ProtocolAnyTLS is AnyTLS over TLS.
+	ProtocolAnyTLS Protocol = "anytls"
+	// ProtocolSSH is SSH with password auth.
+	ProtocolSSH Protocol = "ssh"
 )
 
 // Valid reports whether p is a protocol supported by the MVP scope.
 func (p Protocol) Valid() bool {
 	switch p {
-	case ProtocolVLESS, ProtocolVMess, ProtocolTrojan, ProtocolShadowsocks, ProtocolHysteria2:
+	case ProtocolVLESS, ProtocolVMess, ProtocolTrojan, ProtocolShadowsocks,
+		ProtocolHysteria2, ProtocolTUIC, ProtocolAnyTLS, ProtocolSSH:
 		return true
 	default:
 		return false
@@ -69,6 +76,10 @@ type ProtocolSettings struct {
 	UpMbps       int    `json:"upMbps,omitempty"`
 	DownMbps     int    `json:"downMbps,omitempty"`
 	Insecure     bool   `json:"insecure,omitempty"`
+	// TUIC congestion control (bbr | cubic | new_reno).
+	Congestion string `json:"congestion,omitempty"`
+	// SSH login user.
+	User string `json:"user,omitempty"`
 	// Display name from URI fragment.
 	Remark string `json:"-"`
 }

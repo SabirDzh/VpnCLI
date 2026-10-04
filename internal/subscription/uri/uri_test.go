@@ -188,3 +188,31 @@ func TestParseTrojanAllowInsecure(t *testing.T) {
 		t.Fatal("insecure must default to false")
 	}
 }
+
+func TestParseTUIC(t *testing.T) {
+	p, err := Parse("tuic://uuid-x:pass-w@vpn.example:8443?congestion_control=bbr&sni=s.example&alpn=h3#TUIC%20node")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Protocol != domain.ProtocolTUIC || p.Settings.UUID != "uuid-x" || p.Settings.Password != "pass-w" ||
+		p.Settings.Congestion != "bbr" || p.Settings.SNI != "s.example" || p.Settings.ALPN != "h3" ||
+		p.Endpoint.Host != "vpn.example" || p.Endpoint.Port != 8443 || p.Name != "TUIC node" {
+		t.Fatalf("parsed: %+v", p)
+	}
+	if _, err := Parse("tuic://vpn.example:8443#x"); err == nil {
+		t.Fatal("expected missing user:password error")
+	}
+}
+
+func TestParseAnyTLSSSH(t *testing.T) {
+	p, err := Parse("anytls://pass-w@vpn.example:443?sni=s.example&insecure=1#any")
+	if err != nil || p.Protocol != domain.ProtocolAnyTLS || p.Settings.Password != "pass-w" ||
+		p.Settings.SNI != "s.example" || !p.Settings.Insecure {
+		t.Fatalf("anytls: %+v err=%v", p, err)
+	}
+	s, err := Parse("ssh://root@vpn.example:22?password=secret#box")
+	if err != nil || s.Protocol != domain.ProtocolSSH || s.Settings.User != "root" ||
+		s.Settings.Password != "secret" || s.Endpoint.Port != 22 {
+		t.Fatalf("ssh: %+v err=%v", s, err)
+	}
+}

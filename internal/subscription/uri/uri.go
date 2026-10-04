@@ -27,6 +27,9 @@ var parsers = map[string]func(string) (domain.Profile, error){
 	"ss":        ParseShadowsocks,
 	"hysteria2": ParseHysteria2,
 	"hy2":       ParseHysteria2,
+	"tuic":      ParseTUIC,
+	"anytls":    ParseAnyTLS,
+	"ssh":       ParseSSH,
 }
 
 // Schemes lists supported URI schemes.
