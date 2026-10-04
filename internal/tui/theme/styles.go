@@ -54,7 +54,7 @@ func Default() Styles {
 		Banner:      lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 		HeaderBar:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("4")).Padding(0, 1),
 		Logo:        lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")),
-		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8")).Padding(0, 1),
+		SelectedRow: lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("8")),
 		ActiveMark:  lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")),
 		Key:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14")),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Width(10),
