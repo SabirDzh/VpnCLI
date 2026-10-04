@@ -112,6 +112,8 @@ type ConnectionAPI interface {
 type ProfileAPI interface {
 	List() ([]domain.Profile, error)
 	Add(uri string) (domain.Profile, error)
+	// AddRaw imports a native core config blob as-is.
+	AddRaw(name string, proto domain.Protocol, data []byte) (domain.Profile, error)
 	Use(idOrName string) (domain.Profile, error)
 	Remove(idOrName string) error
 	Edit(idOrName, name, uri string) (domain.Profile, error)

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
+	"github.com/SabirDzh/VpnCLI/internal/platform"
 )
 
 // NewProfileCmd groups profile management commands.
@@ -16,29 +18,49 @@ func NewProfileCmd(d Deps) *cobra.Command {
 	c.AddCommand(
 		&cobra.Command{
 			Use:   "add <uri|file>",
-			Short: "Add a profile from URI or native config file",
-			Args:  cobra.ExactArgs(1),
+			Short: "Add a profile from URI, file or clipboard",
+			Args:  cobra.MaximumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				isFile, _ := cmd.Flags().GetBool("file")
-				if isFile {
+				useClip, _ := cmd.Flags().GetBool("clipboard")
+				proto, _ := cmd.Flags().GetString("protocol")
+				switch {
+				case useClip:
+					data, err := platform.ReadClipboard()
+					if err != nil {
+						return err
+					}
+					p, err := addPayload(d, "clipboard", proto, []byte(strings.TrimSpace(data)))
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "added %s (%s %s)\n", p.ID, p.Protocol, p.Name)
+					return nil
+				case isFile:
+					if len(args) != 1 {
+						return fmt.Errorf("add --file requires a path")
+					}
 					data, err := os.ReadFile(args[0])
 					if err != nil {
 						return err
 					}
-					proto, _ := cmd.Flags().GetString("protocol")
-					p, err := d.Profile.AddRaw(filepath.Base(args[0]), domain.Protocol(proto), data)
+					p, err := addPayload(d, filepath.Base(args[0]), proto, data)
 					if err != nil {
 						return err
 					}
-					fmt.Fprintf(cmd.OutOrStdout(), "added raw profile %s (%s)\n", p.ID, p.Name)
+					fmt.Fprintf(cmd.OutOrStdout(), "added %s (%s %s)\n", p.ID, p.Protocol, p.Name)
+					return nil
+				default:
+					if len(args) != 1 {
+						return fmt.Errorf("add requires a uri argument")
+					}
+					p, err := d.Profile.AddFromURI(args[0])
+					if err != nil {
+						return err
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "added %s (%s %s)\n", p.ID, p.Protocol, p.Name)
 					return nil
 				}
-				p, err := d.Profile.AddFromURI(args[0])
-				if err != nil {
-					return err
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "added %s (%s %s)\n", p.ID, p.Protocol, p.Name)
-				return nil
 			},
 		},
 		&cobra.Command{
@@ -89,9 +111,24 @@ func NewProfileCmd(d Deps) *cobra.Command {
 			},
 		},
 	)
-	c.Commands()[0].Flags().Bool("file", false, "import native core config file as-is")
-	c.Commands()[0].Flags().String("protocol", string(domain.ProtocolVLESS), "protocol hint for --file import")
+	c.Commands()[0].Flags().Bool("file", false, "import profile or native core config from file")
+	c.Commands()[0].Flags().Bool("clipboard", false, "import profile or native core config from clipboard")
+	c.Commands()[0].Flags().String("protocol", string(domain.ProtocolVLESS), "protocol hint for raw --file import")
 	return c
+}
+
+// addPayload imports a URI payload or, when the data does not look like a
+// URI, a native core config as-is.
+func addPayload(d Deps, name string, proto string, data []byte) (domain.Profile, error) {
+	if looksLikeURI(data) {
+		return d.Profile.AddFromURI(strings.TrimSpace(string(data)))
+	}
+	return d.Profile.AddRaw(name, domain.Protocol(proto), data)
+}
+
+func looksLikeURI(data []byte) bool {
+	i := strings.Index(string(data), "://")
+	return i > 0
 }
 
 func portStr(p uint16) string {

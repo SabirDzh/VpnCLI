@@ -79,6 +79,10 @@ func (a profileAdapter) Add(uri string) (domain.Profile, error) {
 	return a.svc.AddFromURI(uri)
 }
 
+func (a profileAdapter) AddRaw(name string, proto domain.Protocol, data []byte) (domain.Profile, error) {
+	return a.svc.AddRaw(name, proto, data)
+}
+
 func (a profileAdapter) Use(id string) (domain.Profile, error) { return a.svc.Use(id) }
 
 func (a profileAdapter) Remove(id string) error { return a.svc.Remove(id) }

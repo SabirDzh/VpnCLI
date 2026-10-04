@@ -8,12 +8,15 @@ package profiles
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/SabirDzh/VpnCLI/internal/domain"
+	"github.com/SabirDzh/VpnCLI/internal/platform"
 	"github.com/SabirDzh/VpnCLI/internal/tui/component"
 	"github.com/SabirDzh/VpnCLI/internal/tui/shared"
 	"github.com/SabirDzh/VpnCLI/internal/tui/theme"
@@ -42,20 +45,28 @@ type Model struct {
 	// editStep drives the two-step edit form: 0 idle, 1 name, 2 uri.
 	editStep  int
 	editName  string
-	cursor    int
-	offset    int
-	filter    string
-	filtering bool
-	width     int
-	height    int
+	// fileImport marks the input as a config-file path (i key).
+	fileImport bool
+	// injectables for tests.
+	readClipboard func() (string, error)
+	readFile      func(string) ([]byte, error)
+	cursor        int
+	offset        int
+	filter        string
+	filtering     bool
+	width         int
+	height        int
 }
 
 // New creates the Profiles tab.
 func New(ctx context.Context, conn shared.ConnectionAPI, profiles shared.ProfileAPI, st theme.Styles, readOnly bool) *Model {
 	return &Model{
 		conn: conn, profiles: profiles, styles: st, readOnly: readOnly, ctx: ctx,
-		toast: component.NewToast(st), confirm: component.NewConfirm(st),
-		input: component.NewInput(st),
+		toast:         component.NewToast(st),
+		confirm:       component.NewConfirm(st),
+		input:         component.NewInput(st),
+		readClipboard: platform.ReadClipboard,
+		readFile:      os.ReadFile,
 	}
 }
 
@@ -68,6 +79,8 @@ func (m *Model) Keys() []key.Binding {
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "use profile")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "use + connect")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add profile")),
+		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "import file")),
+		key.NewBinding(key.WithKeys("p"), key.WithHelp("p", "paste uri")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit profile")),
 		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete profile")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
@@ -267,6 +280,23 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		}
 		m.input.Open("URI профиля:", "")
 		return m, nil
+	case "i":
+		if m.busy {
+			return m, nil
+		}
+		m.fileImport = true
+		m.input.Open("Путь к файлу (URI или native-конфиг):", "")
+		return m, nil
+	case "p":
+		if m.busy {
+			return m, nil
+		}
+		text, err := m.readClipboard()
+		if err != nil {
+			return m, m.showToast("Буфер обмена: "+err.Error(), false)
+		}
+		m.input.Open("URI профиля (из буфера):", text)
+		return m, nil
 	case "e":
 		it, ok := m.selected()
 		if !ok || m.busy {
@@ -366,6 +396,24 @@ func (m *Model) moveCursor(d int) {
 	m.clamp()
 }
 
+// importFile reads a config path and dispatches: URI payloads go through
+// the regular add flow, native configs import as-is.
+func (m *Model) importFile(path string) tea.Cmd {
+	if path == "" {
+		return nil
+	}
+	data, err := m.readFile(path)
+	if err != nil {
+		return m.showToast("Файл: "+err.Error(), false)
+	}
+	if i := strings.Index(string(data), "://"); i > 0 {
+		m.input.Open("URI профиля:", strings.TrimSpace(string(data)))
+		return nil
+	}
+	m.busy = true
+	return shared.DoAddRaw(m.profiles, filepath.Base(path), domain.ProtocolVLESS, data)
+}
+
 // updateInput routes keys to the add-profile field.
 func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	kp, ok := msg.(tea.KeyPressMsg)
@@ -374,13 +422,18 @@ func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	}
 	switch kp.String() {
 	case "enter":
-		uri := m.input.Value()
+		value := m.input.Value()
+		if m.fileImport {
+			m.fileImport = false
+			m.input.Close()
+			return m, m.importFile(value)
+		}
 		m.input.Close()
-		if uri == "" {
+		if value == "" {
 			return m, nil
 		}
 		m.busy = true
-		return m, shared.DoAdd(m.profiles, uri)
+		return m, shared.DoAdd(m.profiles, value)
 	case "esc":
 		m.input.Close()
 		return m, nil

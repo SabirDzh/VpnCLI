@@ -7,6 +7,8 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/SabirDzh/VpnCLI/internal/domain"
 )
 
 // Screen is implemented by every TUI tab. View renders into the given
@@ -115,6 +117,17 @@ func DoUse(profiles ProfileAPI, idOrName, label string) tea.Cmd {
 func DoAdd(profiles ProfileAPI, uri string) tea.Cmd {
 	return func() tea.Msg {
 		p, err := profiles.Add(uri)
+		if err != nil {
+			return OpDoneMsg{Op: "add", Err: err}
+		}
+		return OpDoneMsg{Op: "add", Label: p.Name}
+	}
+}
+
+// DoAddRaw imports a profile from a native core config blob.
+func DoAddRaw(profiles ProfileAPI, name string, proto domain.Protocol, data []byte) tea.Cmd {
+	return func() tea.Msg {
+		p, err := profiles.AddRaw(name, proto, data)
 		if err != nil {
 			return OpDoneMsg{Op: "add", Err: err}
 		}

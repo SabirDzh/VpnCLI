@@ -60,6 +60,7 @@ type FakeProfiles struct {
 	Used    []string
 	Removed []string
 	Added   []string
+	RawAdds []RawAdd
 	Edited  []EditCall
 }
 
@@ -81,6 +82,24 @@ func (f *FakeProfiles) Add(uri string) (domain.Profile, error) {
 	p := domain.Profile{ID: "new", Name: uri}
 	f.Items = append(f.Items, p)
 	f.Added = append(f.Added, uri)
+	return p, nil
+}
+
+// RawAdded records AddRaw calls.
+type RawAdd struct {
+	Name string
+	Proto domain.Protocol
+	Data []byte
+}
+
+// AddRaw implements shared.ProfileAPI.
+func (f *FakeProfiles) AddRaw(name string, proto domain.Protocol, data []byte) (domain.Profile, error) {
+	if f.AddErr != nil {
+		return domain.Profile{}, f.AddErr
+	}
+	f.RawAdds = append(f.RawAdds, RawAdd{Name: name, Proto: proto, Data: data})
+	p := domain.Profile{ID: "new-raw", Name: name, Protocol: proto, Raw: data}
+	f.Items = append(f.Items, p)
 	return p, nil
 }
 
