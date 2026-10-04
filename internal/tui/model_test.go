@@ -361,3 +361,26 @@ func TestSettingsMenuEntry(t *testing.T) {
 		t.Fatal("must return to menu")
 	}
 }
+
+func TestOpenPageShowsAllItems(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 26)
+	// open Profiles via shortcut (no resize afterwards)
+	nm, _ := m.Update(keyPress("2"))
+	m = nm.(*Model)
+	nm, _ = m.Update(shared.ProfilesMsg{
+		List: []domain.Profile{
+			{ID: "a1", Name: "home"},
+			{ID: "b2", Name: "work"},
+			{ID: "c3", Name: "hy2"},
+		},
+		ActiveID: "a1",
+	})
+	m = nm.(*Model)
+	out := strip(m.render())
+	for _, want := range []string{"home", "work", "hy2"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in:\n%s", want, out)
+		}
+	}
+}

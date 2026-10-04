@@ -152,17 +152,28 @@ func (m *Model) menuKey(k string) tea.Cmd {
 			m.cursor++
 		}
 	case "enter", "space":
-		m.page = m.pages[m.cursor]
-		return m.page.Init()
+		return m.openPage(m.cursor)
 	case "1", "2", "3", "4":
 		n := int(k[0] - '1')
 		if n >= 0 && n < len(m.pages) {
 			m.cursor = n
-			m.page = m.pages[n]
-			return m.page.Init()
+			return m.openPage(n)
 		}
 	}
 	return nil
+}
+
+// openPage shows the page and hands it the current window size,
+// otherwise lists render with zero height until the next resize.
+func (m *Model) openPage(n int) tea.Cmd {
+	m.page = m.pages[n]
+	init := m.page.Init()
+	if !m.ready {
+		return init
+	}
+	next, scmd := m.page.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+	m.page = next
+	return tea.Batch(init, scmd)
 }
 
 // View assembles header, body and footer into an alt-screen view.

@@ -278,6 +278,8 @@ func (m *Model) View(width, height int) string {
 	}
 	b.WriteString("\n")
 	b.WriteString(m.styles.Dim.Render("enter — выбрать · c — выбрать и подключить · / — фильтр") + "\n\n")
+	// Size the list from the allocated space: title + hint + blank above.
+	m.list.SetSize(width, max(1, height-3))
 	switch {
 	case !m.loaded:
 		b.WriteString(m.styles.Dim.Render("loading…") + "\n")
