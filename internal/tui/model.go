@@ -266,7 +266,7 @@ func (m *Model) header() string {
 		banner = m.styles.Banner.Render("  [read-only: без root]")
 	}
 	// air around the logo: blank line above and below
-	return "\n" + logo + banner + "\n"
+	return "\n" + logo + banner + "\n\n"
 }
 
 // logoLines is the ASCII logo rendered in the header.
