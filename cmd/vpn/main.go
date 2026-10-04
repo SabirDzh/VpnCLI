@@ -80,6 +80,7 @@ func run() error {
 	profileSvc := app.NewProfileService(store)
 	subSvc := app.NewSubscriptionService(store, store)
 	connSvc := app.NewConnectionService(store, reg, cfg, paths)
+	updateSvc := app.NewUpdateService("SabirDzh/VpnCLI", version)
 
 	root := cli.NewRootCmd(cli.Deps{
 		Config:  cfg,
@@ -89,6 +90,7 @@ func run() error {
 		Profile: profileSvc,
 		Sub:     subSvc,
 		Conn:    connSvc,
+		Update:  updateSvc,
 		Version: version,
 	})
 	// Re-attach persistent flags to the real tree.

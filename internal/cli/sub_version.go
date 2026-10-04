@@ -83,14 +83,20 @@ func NewSubCmd(d Deps) *cobra.Command {
 	return c
 }
 
-// NewVersionCmd prints the build version.
+// NewVersionCmd prints CLI and core versions.
 func NewVersionCmd(d Deps) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			fmt.Fprintf(cmd.OutOrStdout(), "vpn %s\n", d.Version)
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "vpn %s\n", d.Version)
+			if v, err := singboxVersion(d.Config.Core.SingBox.Path); err == nil {
+				fmt.Fprintf(out, "sing-box %s (min %s)\n", v, d.Config.Core.SingBox.MinVers)
+			} else {
+				fmt.Fprintf(out, "sing-box not found (min %s)\n", d.Config.Core.SingBox.MinVers)
+			}
 			return nil
 		},
 	}

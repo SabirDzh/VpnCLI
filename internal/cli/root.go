@@ -21,6 +21,7 @@ type Deps struct {
 	Profile *app.ProfileService
 	Sub     *app.SubscriptionService
 	Conn    *app.ConnectionService
+	Update  *app.UpdateService
 	Version string
 }
 
@@ -41,6 +42,7 @@ func NewRootCmd(d Deps) *cobra.Command {
 		NewStatusCmd(d),
 		NewProfileCmd(d),
 		NewSubCmd(d),
+		NewUpdateCmd(d),
 		NewVersionCmd(d),
 	)
 	return root
