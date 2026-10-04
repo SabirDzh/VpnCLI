@@ -43,6 +43,7 @@ func NewRootCmd(d Deps) *cobra.Command {
 		NewProfileCmd(d),
 		NewSubCmd(d),
 		NewUpdateCmd(d),
+		NewTUICmd(d),
 		NewVersionCmd(d),
 	)
 	return root

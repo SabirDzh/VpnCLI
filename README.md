@@ -64,6 +64,8 @@ vpn profile add "vless://uuid@host:443?security=reality&sni=example.com&fp=chrom
 vpn up [profile]            connect (default: active profile)
 vpn down                    disconnect
 vpn status                  connection status
+vpn tui                     interactive terminal UI (needs sudo for TUN)
+vpn update [--check]        check for and install CLI updates
 vpn profile add|list|use|remove
 vpn sub add|list|update|remove
 vpn version
@@ -99,6 +101,29 @@ tun:
   strict_route: true
 mixed_port: 10808
 ```
+
+## TUI
+
+```sh
+sudo vpn tui
+```
+
+Интерактивный интерфейс: статус, профили, подписки. TUN требует root,
+поэтому без sudo TUI стартует в режиме чтения (статус и списки работают,
+`up`/`down` объясняют, что нужен root). Выход из TUI (`q`, `ctrl+c`)
+**не выключает VPN** — ядро живёт отдельным процессом.
+
+| Клавиша | Действие |
+|---|---|
+| `1 2 3`, `tab` / `shift+tab` | переключение экранов |
+| `↑ ↓` / `j k` | навигация |
+| `enter` | основное действие экрана |
+| `c` | подключить / отключить |
+| `u` / `U` | обновить подписку / все подписки |
+| `/` | фильтр (Profiles) |
+| `r` | обновить данные |
+| `?` | полная справка |
+| `q`, `ctrl+c` | выход (VPN остаётся включённым) |
 
 ## Dev
 
