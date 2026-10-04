@@ -89,6 +89,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd, handled := m.globalKey(msg.String()); handled {
 			return m, cmd
 		}
+		// esc closes the help overlay before reaching pages
+		if m.showAll && msg.String() == "esc" {
+			m.showAll = false
+			return m, nil
+		}
 		if m.page != nil {
 			return m, m.forwardToPage(msg)
 		}
@@ -343,6 +348,8 @@ func (m *Model) fullHelp() string {
 		{"enter / c (Status)", "подключить / отключить"},
 		{"enter (Profiles)", "сделать активным"},
 		{"c (Profiles)", "активировать и подключить"},
+		{"a", "добавить (профиль или подписку)"},
+		{"x", "удалить выбранное"},
 		{"u / U", "обновить подписку / все подписки"},
 		{"/", "фильтр (Profiles)"},
 		{"r", "обновить данные"},

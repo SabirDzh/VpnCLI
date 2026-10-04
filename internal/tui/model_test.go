@@ -384,3 +384,17 @@ func TestOpenPageShowsAllItems(t *testing.T) {
 		}
 	}
 }
+
+func TestEscClosesHelp(t *testing.T) {
+	deps, _, _, _ := testDeps()
+	m := sized(NewModel(context.Background(), deps), 80, 24)
+	nm, _ := m.Update(keyPress("?"))
+	m = nm.(*Model)
+	if !m.showAll {
+		t.Fatal("must show help")
+	}
+	nm, _ = m.Update(keyPress("esc"))
+	if nm.(*Model).showAll {
+		t.Fatal("esc must hide help")
+	}
+}

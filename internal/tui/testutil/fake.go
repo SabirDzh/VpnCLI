@@ -52,15 +52,28 @@ type FakeProfiles struct {
 	ActiveID  string
 	ListErr   error
 	ActiveErr error
+	AddErr    error
 	UseErr    error
 	RemoveErr error
 
 	Used    []string
 	Removed []string
+	Added   []string
 }
 
 // List implements shared.FakeProfiles.
 func (f *FakeProfiles) List() ([]domain.Profile, error) { return f.Items, f.ListErr }
+
+// Add implements shared.ProfileAPI.
+func (f *FakeProfiles) Add(uri string) (domain.Profile, error) {
+	if f.AddErr != nil {
+		return domain.Profile{}, f.AddErr
+	}
+	p := domain.Profile{ID: "new", Name: uri}
+	f.Items = append(f.Items, p)
+	f.Added = append(f.Added, uri)
+	return p, nil
+}
 
 // Active implements shared.FakeProfiles.
 func (f *FakeProfiles) Active() (domain.Profile, error) {
@@ -101,9 +114,11 @@ type FakeSubs struct {
 	ListErr   error
 	UpdateErr error
 	UpdateN   int
+	AddErr    error
 
 	Updated []string
 	Removed []string
+	Added   [][2]string
 }
 
 // List implements shared.FakeSubs.
@@ -119,4 +134,15 @@ func (f *FakeSubs) Update(id string) (int, error) {
 func (f *FakeSubs) Remove(id string) error {
 	f.Removed = append(f.Removed, id)
 	return nil
+}
+
+// Add implements shared.SubscriptionAPI.
+func (f *FakeSubs) Add(name, url string) (domain.Subscription, error) {
+	if f.AddErr != nil {
+		return domain.Subscription{}, f.AddErr
+	}
+	sub := domain.Subscription{ID: "new-sub", Name: name, URL: url}
+	f.Items = append(f.Items, sub)
+	f.Added = append(f.Added, [2]string{name, url})
+	return sub, nil
 }

@@ -33,7 +33,13 @@ type Model struct {
 	busyID  string // subscription id being updated, "" for all
 	spin    spinner.Model
 	toast   component.Toast
-	width   int
+	input   component.Input
+	confirm component.Confirm
+	// inputStep drives the two-step add: 0 idle, 1 name, 2 url.
+	inputStep int
+	tmpName   string
+	pending   domain.Subscription
+	width     int
 }
 
 // New creates the Subscriptions tab.
@@ -45,6 +51,8 @@ func New(deps shared.Deps, st theme.Styles) *Model {
 		errs:     map[string]string{},
 		spin:     spinner.New(spinner.WithSpinner(spinner.Dot)),
 		toast:    component.NewToast(st),
+		input:    component.NewInput(st),
+		confirm:  component.NewConfirm(st),
 	}
 }
 
@@ -56,6 +64,8 @@ func (m *Model) Keys() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "update selected")),
 		key.NewBinding(key.WithKeys("U"), key.WithHelp("U", "update all")),
+		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add subscription")),
+		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete subscription")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	}
 }
@@ -65,6 +75,12 @@ func (m *Model) Init() tea.Cmd { return shared.FetchSubs(m.profiles, m.subs) }
 
 // Update implements shared.Screen.
 func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	if m.confirm.Showing() {
+		return m.updateConfirm(msg)
+	}
+	if m.inputStep != 0 {
+		return m.updateInput(msg)
+	}
 	switch msg := msg.(type) {
 	case shared.SubsMsg:
 		m.loaded = true
@@ -99,6 +115,19 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		}
 		if msg.Op == "update-all" {
 			m.errs = map[string]string{}
+		}
+		if msg.Op == "sub-add" {
+			return m, tea.Batch(
+				m.showToast("Добавлена: "+msg.Label, true),
+				shared.FetchSubs(m.profiles, m.subs),
+			)
+		}
+		if msg.Op == "sub-remove" {
+			delete(m.errs, msg.Label)
+			return m, tea.Batch(
+				m.showToast("Удалена: "+msg.Label, true),
+				shared.FetchSubs(m.profiles, m.subs),
+			)
 		}
 		cmds = append(cmds, m.showToast(fmt.Sprintf("Обновлено профилей: %d", msg.N), true))
 		return m, tea.Batch(cmds...)
@@ -138,6 +167,22 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 			return m, nil
 		}
 		return m, shared.FetchSubs(m.profiles, m.subs)
+	case "a":
+		if m.busy {
+			return m, nil
+		}
+		m.inputStep = 1
+		m.tmpName = ""
+		m.input.Open("Имя подписки:", "")
+		return m, nil
+	case "x":
+		if m.busy || !m.loaded || len(m.list) == 0 {
+			return m, nil
+		}
+		sub := m.list[m.cursor]
+		m.pending = sub
+		m.confirm.Ask(fmt.Sprintf("Удалить %s?", sub.Name), "delete")
+		return m, nil
 	case "esc":
 		return m, shared.Back()
 	case "u", "U":
@@ -160,6 +205,64 @@ func (m *Model) showToast(text string, ok bool) tea.Cmd {
 	return m.toast.Show(text, ok, func(id int) tea.Msg {
 		return shared.ToastExpiredMsg{ID: id}
 	})
+}
+
+// updateInput drives the two-step add form: name, then URL.
+func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	kp, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch kp.String() {
+	case "enter":
+		if m.inputStep == 1 {
+			m.tmpName = m.input.Value()
+			if m.tmpName == "" {
+				return m, nil
+			}
+			m.inputStep = 2
+			m.input.Open("URL подписки:", "")
+			return m, nil
+		}
+		url := m.input.Value()
+		m.inputStep = 0
+		m.input.Close()
+		if url == "" {
+			return m, nil
+		}
+		m.busy = true
+		return m, shared.DoSubAdd(m.subs, m.tmpName, url)
+	case "esc":
+		m.inputStep = 0
+		m.input.Close()
+		return m, nil
+	default:
+		m.input.Key(kp.String())
+		return m, nil
+	}
+}
+
+func (m *Model) updateConfirm(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	kp, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch kp.String() {
+	case "left", "right", "tab", "shift+tab":
+		m.confirm.Move()
+		return m, nil
+	case "enter":
+		_, ok := m.confirm.Resolve()
+		if !ok {
+			return m, nil
+		}
+		m.busy = true
+		return m, shared.DoSubRemove(m.subs, m.pending.ID, m.pending.Name)
+	case "esc", "q":
+		m.confirm.Resolve()
+		return m, nil
+	}
+	return m, nil
 }
 
 // View implements shared.Screen.
@@ -205,6 +308,12 @@ func (m *Model) View(_, _ int) string {
 	}
 	if t := m.toast.View(); t != "" {
 		b.WriteString(t + "\n")
+	}
+	if m.confirm.Showing() {
+		b.WriteString("\n" + m.confirm.View(m.width))
+	}
+	if m.inputStep != 0 {
+		b.WriteString("\n" + m.input.View())
 	}
 	return shared.IndentLines(b.String(), " ")
 }

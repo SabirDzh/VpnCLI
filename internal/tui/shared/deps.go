@@ -52,6 +52,7 @@ type ConnectionAPI interface {
 // ProfileAPI is the subset of ProfileService the TUI needs.
 type ProfileAPI interface {
 	List() ([]domain.Profile, error)
+	Add(uri string) (domain.Profile, error)
 	Use(idOrName string) (domain.Profile, error)
 	Remove(idOrName string) error
 	Active() (domain.Profile, error)
@@ -60,6 +61,7 @@ type ProfileAPI interface {
 // SubscriptionAPI is the subset of SubscriptionService the TUI needs.
 type SubscriptionAPI interface {
 	List() ([]domain.Subscription, error)
+	Add(name, url string) (domain.Subscription, error)
 	Update(idOrName string) (int, error)
 	Remove(idOrName string) error
 }

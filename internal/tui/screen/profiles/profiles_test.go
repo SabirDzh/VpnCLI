@@ -205,3 +205,51 @@ func TestBadgesRendered(t *testing.T) {
 		}
 	}
 }
+
+func typeText(m *Model, s string) *Model {
+	for _, r := range s {
+		ns, _ := m.Update(tea.KeyPressMsg{Code: r})
+		m = ns.(*Model)
+	}
+	return m
+}
+
+func TestAddProfileFlow(t *testing.T) {
+	m, _, prof := testModel()
+	ns, _ := m.Update(kf("a"))
+	mm := ns.(*Model)
+	if !mm.input.Showing() {
+		t.Fatal("a must open input")
+	}
+	mm = typeText(mm, "trojan://pw@h:1#n")
+	ns, cmd := mm.Update(kf("enter"))
+	if cmd == nil {
+		t.Fatal("enter must submit")
+	}
+	_ = cmd()
+	if len(prof.Added) != 1 {
+		t.Fatalf("Added = %v", prof.Added)
+	}
+	ns, _ = ns.Update(shared.OpDoneMsg{Op: "add", Label: "n"})
+	_ = ns
+}
+
+func TestDeleteProfileFlow(t *testing.T) {
+	m, _, prof := testModel()
+	prof.Items = append(prof.Items, domain.Profile{ID: "z9", Name: "gone"})
+	ns, _ := m.Update(shared.ProfilesMsg{List: prof.Items, ActiveID: "a1"})
+	mm := ns.(*Model)
+	mm.cursor = 2
+	ns, _ = mm.Update(kf("x"))
+	mm = ns.(*Model)
+	if !mm.confirm.Showing() {
+		t.Fatal("x must ask confirm")
+	}
+	ns, _ = mm.Update(kf("right"))
+	ns, cmd := ns.Update(kf("enter"))
+	_ = cmd()
+	if len(prof.Removed) != 1 || prof.Removed[0] != "z9" {
+		t.Fatalf("Removed = %v", prof.Removed)
+	}
+	_ = ns
+}

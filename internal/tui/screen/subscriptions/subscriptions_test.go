@@ -185,3 +185,53 @@ func TestRowErrorShown(t *testing.T) {
 		t.Fatalf("must clear row error:\n%s", out)
 	}
 }
+
+func typeTextSubs(m *Model, s string) *Model {
+	for _, r := range s {
+		ns, _ := m.Update(tea.KeyPressMsg{Code: r})
+		m = ns.(*Model)
+	}
+	return m
+}
+
+func TestAddSubTwoStep(t *testing.T) {
+	m, subs := testModel()
+	ns, _ := m.Update(kf('a'))
+	mm := ns.(*Model)
+	if mm.inputStep != 1 {
+		t.Fatal("a must start name step")
+	}
+	mm = typeTextSubs(mm, "mysub")
+	ns, _ = mm.Update(kfEnter())
+	mm = ns.(*Model)
+	if mm.inputStep != 2 {
+		t.Fatal("enter must advance to url step")
+	}
+	mm = typeTextSubs(mm, "https://x/y")
+	_, cmd := mm.Update(kfEnter())
+	if cmd == nil {
+		t.Fatal("enter must submit")
+	}
+	_ = cmd()
+	if len(subs.Added) != 1 || subs.Added[0] != [2]string{"mysub", "https://x/y"} {
+		t.Fatalf("Added = %v", subs.Added)
+	}
+}
+
+func kfEnter() tea.Msg { return tea.KeyPressMsg{Code: tea.KeyEnter} }
+
+func TestDeleteSubFlow(t *testing.T) {
+	m, subs := testModel()
+	ns, _ := m.Update(kf('x'))
+	mm := ns.(*Model)
+	if !mm.confirm.Showing() {
+		t.Fatal("x must ask confirm")
+	}
+	ns, _ = mm.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	ns, cmd := ns.Update(kfEnter())
+	_ = cmd()
+	if len(subs.Removed) != 1 || subs.Removed[0] != "s1" {
+		t.Fatalf("Removed = %v", subs.Removed)
+	}
+	_ = ns
+}

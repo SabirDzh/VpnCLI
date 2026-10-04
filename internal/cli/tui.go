@@ -68,6 +68,10 @@ type profileActiveStore interface {
 
 func (a profileAdapter) List() ([]domain.Profile, error) { return a.svc.List() }
 
+func (a profileAdapter) Add(uri string) (domain.Profile, error) {
+	return a.svc.AddFromURI(uri)
+}
+
 func (a profileAdapter) Use(id string) (domain.Profile, error) { return a.svc.Use(id) }
 
 func (a profileAdapter) Remove(id string) error { return a.svc.Remove(id) }
@@ -108,6 +112,10 @@ func buildSettingsInfo(d Deps) shared.SettingsInfo {
 type subAdapter struct{ svc *app.SubscriptionService }
 
 func (a subAdapter) List() ([]domain.Subscription, error) { return a.svc.List() }
+
+func (a subAdapter) Add(name, url string) (domain.Subscription, error) {
+	return a.svc.Add(name, url)
+}
 
 func (a subAdapter) Update(id string) (int, error) { return a.svc.Update(id) }
 

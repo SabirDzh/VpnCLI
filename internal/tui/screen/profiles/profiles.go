@@ -36,7 +36,8 @@ type Model struct {
 	connectAfterUse bool
 	confirm         component.Confirm
 	toast           component.Toast
-	pending         domain.Profile // connect target awaiting confirm verdict
+	input           component.Input
+	pending         domain.Profile // target awaiting confirm verdict
 	cursor          int
 	offset          int
 	filter          string
@@ -50,6 +51,7 @@ func New(ctx context.Context, conn shared.ConnectionAPI, profiles shared.Profile
 	return &Model{
 		conn: conn, profiles: profiles, styles: st, readOnly: readOnly, ctx: ctx,
 		toast: component.NewToast(st), confirm: component.NewConfirm(st),
+		input: component.NewInput(st),
 	}
 }
 
@@ -61,6 +63,8 @@ func (m *Model) Keys() []key.Binding {
 	return []key.Binding{
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "use profile")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "use + connect")),
+		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add profile")),
+		key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "delete profile")),
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "refresh")),
 	}
@@ -124,6 +128,9 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 	if m.confirm.Showing() {
 		return m.updateConfirm(msg)
 	}
+	if m.input.Showing() {
+		return m.updateInput(msg)
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -164,6 +171,18 @@ func (m *Model) Update(msg tea.Msg) (shared.Screen, tea.Cmd) {
 			m.busy = false
 			return m, tea.Batch(
 				m.showToast("Подключено: "+msg.Label, true),
+				shared.FetchProfiles(m.profiles),
+			)
+		case "add", "remove":
+			m.busy = false
+			if msg.Op == "add" {
+				return m, tea.Batch(
+					m.showToast("Добавлен: "+msg.Label, true),
+					shared.FetchProfiles(m.profiles),
+				)
+			}
+			return m, tea.Batch(
+				m.showToast("Удалён: "+msg.Label, true),
 				shared.FetchProfiles(m.profiles),
 			)
 		default:
@@ -231,6 +250,20 @@ func (m *Model) onKey(k string) (shared.Screen, tea.Cmd) {
 		}
 		m.filtering = true
 		return m, nil
+	case "a":
+		if m.busy {
+			return m, nil
+		}
+		m.input.Open("URI профиля:", "")
+		return m, nil
+	case "x":
+		it, ok := m.selected()
+		if !ok || m.busy {
+			return m, nil
+		}
+		m.pending = it
+		m.confirm.Ask(fmt.Sprintf("Удалить %s?", it.Name), "delete")
+		return m, nil
 	case "esc":
 		return m, shared.Back()
 	}
@@ -289,11 +322,13 @@ func (m *Model) updateConfirm(msg tea.Msg) (shared.Screen, tea.Cmd) {
 		return m, nil
 	case "enter":
 		tag, ok := m.confirm.Resolve()
-		_ = tag
 		if !ok {
 			return m, nil
 		}
 		m.busy = true
+		if tag == "delete" {
+			return m, shared.DoRemove(m.profiles, m.pending.ID, m.pending.Name)
+		}
 		m.connectAfterUse = true
 		return m, shared.DoUse(m.profiles, m.pending.ID, m.pending.Name)
 	case "esc", "q":
@@ -306,6 +341,30 @@ func (m *Model) updateConfirm(msg tea.Msg) (shared.Screen, tea.Cmd) {
 func (m *Model) moveCursor(d int) {
 	m.cursor += d
 	m.clamp()
+}
+
+// updateInput routes keys to the add-profile field.
+func (m *Model) updateInput(msg tea.Msg) (shared.Screen, tea.Cmd) {
+	kp, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return m, nil
+	}
+	switch kp.String() {
+	case "enter":
+		uri := m.input.Value()
+		m.input.Close()
+		if uri == "" {
+			return m, nil
+		}
+		m.busy = true
+		return m, shared.DoAdd(m.profiles, uri)
+	case "esc":
+		m.input.Close()
+		return m, nil
+	default:
+		m.input.Key(kp.String())
+		return m, nil
+	}
 }
 
 func (m *Model) showToast(text string, ok bool) tea.Cmd {
@@ -364,6 +423,9 @@ func (m *Model) View(width, height int) string {
 	}
 	if m.confirm.Showing() {
 		b.WriteString("\n" + m.confirm.View(width))
+	}
+	if m.input.Showing() {
+		b.WriteString("\n" + m.input.View())
 	}
 	_ = height
 	return shared.IndentLines(b.String(), " ")

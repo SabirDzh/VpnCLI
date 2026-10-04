@@ -28,7 +28,8 @@ type SubsMsg struct {
 	Err    error
 }
 
-// OpDoneMsg reports completion of an async operation (up/down/use/update).
+// OpDoneMsg reports completion of an async operation
+// (up/down/use/add/remove/update/sub-add/sub-remove).
 type OpDoneMsg struct {
 	Op    string // "up" | "down" | "use" | "update" | "update-all"
 	Label string // human context, e.g. profile name

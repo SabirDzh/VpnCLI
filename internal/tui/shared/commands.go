@@ -111,6 +111,24 @@ func DoUse(profiles ProfileAPI, idOrName, label string) tea.Cmd {
 	}
 }
 
+// DoAdd imports a profile from a URI string.
+func DoAdd(profiles ProfileAPI, uri string) tea.Cmd {
+	return func() tea.Msg {
+		p, err := profiles.Add(uri)
+		if err != nil {
+			return OpDoneMsg{Op: "add", Err: err}
+		}
+		return OpDoneMsg{Op: "add", Label: p.Name}
+	}
+}
+
+// DoRemove deletes a profile.
+func DoRemove(profiles ProfileAPI, id, label string) tea.Cmd {
+	return func() tea.Msg {
+		return OpDoneMsg{Op: "remove", Label: label, Err: profiles.Remove(id)}
+	}
+}
+
 // FetchSubs loads subscriptions with profile counts.
 func FetchSubs(profiles ProfileAPI, subs SubscriptionAPI) tea.Cmd {
 	return func() tea.Msg {
@@ -125,6 +143,24 @@ func FetchSubs(profiles ProfileAPI, subs SubscriptionAPI) tea.Cmd {
 			}
 		}
 		return SubsMsg{Subs: list, Counts: counts}
+	}
+}
+
+// DoSubAdd registers a subscription source.
+func DoSubAdd(subs SubscriptionAPI, name, url string) tea.Cmd {
+	return func() tea.Msg {
+		s, err := subs.Add(name, url)
+		if err != nil {
+			return OpDoneMsg{Op: "sub-add", Err: err}
+		}
+		return OpDoneMsg{Op: "sub-add", Label: s.Name}
+	}
+}
+
+// DoSubRemove deletes a subscription source.
+func DoSubRemove(subs SubscriptionAPI, id, label string) tea.Cmd {
+	return func() tea.Msg {
+		return OpDoneMsg{Op: "sub-remove", Label: label, Err: subs.Remove(id)}
 	}
 }
 

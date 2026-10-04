@@ -70,3 +70,38 @@ func TestConfirm(t *testing.T) {
 		t.Fatal("must resolve No")
 	}
 }
+
+func TestInputEdit(t *testing.T) {
+	in := NewInput(theme.Default())
+	if in.Showing() {
+		t.Fatal("hidden initially")
+	}
+	in.Open("Title:", "ab")
+	if !in.Showing() || in.Value() != "ab" {
+		t.Fatal("must open with value")
+	}
+	in.Key("left")
+	in.Key("X")
+	if in.Value() != "aXb" {
+		t.Fatalf("got %q", in.Value())
+	}
+	in.Key("backspace")
+	if in.Value() != "ab" {
+		t.Fatalf("got %q", in.Value())
+	}
+	in.Key("right")
+	in.Key("space")
+	if in.Value() != "ab " {
+		t.Fatalf("got %q", in.Value())
+	}
+	if in.Key("enter") {
+		t.Fatal("enter is not an edit key")
+	}
+	if !strings.Contains(in.View(), "Title:") {
+		t.Fatal("must render title")
+	}
+	in.Close()
+	if in.Showing() || in.View() != "" {
+		t.Fatal("must hide")
+	}
+}
