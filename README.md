@@ -9,7 +9,12 @@ vmess, trojan, shadowsocks, hysteria2. Режим TUN основной + лок�
 curl -fsSL https://raw.githubusercontent.com/SabirDzh/VpnCLI/master/install.sh | sh
 # конкретная версия:  VERSION=v0.1.0 curl ... | sh
 # другой префикс:     PREFIX=~/.local curl ... | sh
+# без ядра:           SKIP_SINGBOX=1 curl ... | sh
 ```
+
+Скрипт ставит и сам CLI, и ядро sing-box (≥ 1.14):
+macOS через Homebrew, Debian/Ubuntu через репозиторий `deb.sagernet.org`.
+Если пакетного менеджера нет — скрипт скажет, что поставить вручную.
 
 Windows (PowerShell, для TUN запускать как Administrator):
 
